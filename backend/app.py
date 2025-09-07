@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List, Optional
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(title="Initio Backend")
 
