@@ -1,3 +1,6 @@
+import os
+
+import httpx
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List, Optional
@@ -6,6 +9,29 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = FastAPI(title="Initio Backend")
+
+
+async def generate_response(message: str) -> str:
+    """Call an external LLM service and return the assistant's reply."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is not set")
+
+    headers = {"Authorization": f"Bearer {api_key}"}
+    payload = {
+        "model": "gpt-3.5-turbo",
+        "messages": [{"role": "user", "content": message}],
+    }
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            json=payload,
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data["choices"][0]["message"]["content"].strip()
 
 
 class ChatRequest(BaseModel):
@@ -17,9 +43,9 @@ class ChatResponse(BaseModel):
 
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(req: ChatRequest) -> ChatResponse:
-    """Return a friendly echo response."""
-    reply = f"Привет! Вы сказали: {req.message}"
+async def chat(req: ChatRequest) -> ChatResponse:
+    """Return a model-generated response for the given message."""
+    reply = await generate_response(req.message)
     return ChatResponse(reply=reply)
 
 
