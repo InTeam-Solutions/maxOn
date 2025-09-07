@@ -1,11 +1,17 @@
 import os
+
 import httpx
 from fastapi import FastAPI, Depends, HTTPException
+
 from pydantic import BaseModel
 from typing import List, Optional
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, ForeignKey, JSON
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship, Session
 from dotenv import load_dotenv
+from sqlalchemy.orm import Session
+
+from .database import Base, SessionLocal, engine
+from .models import Event, EventSkip
 
 load_dotenv()
 
@@ -49,6 +55,16 @@ def get_db():
 
 app = FastAPI(title="Initio Backend")
 
+Base.metadata.create_all(bind=engine)
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 
 async def generate_response(message: str) -> str:
     """Call an external LLM service and return the assistant's reply."""
@@ -88,18 +104,61 @@ async def chat(req: ChatRequest) -> ChatResponse:
     return ChatResponse(reply=reply)
 
 
-class EventRequest(BaseModel):
+class EventCreate(BaseModel):
+    time: datetime
     description: str
+    cron: Optional[str] = None
+    skipped_dates: List[date] = []
 
 
-class EventResponse(BaseModel):
+class EventOut(BaseModel):
+    id: int
+    time: datetime
     description: str
+    cron: Optional[str] = None
+    skipped_dates: List[date] = []
 
 
-@app.post("/calendar/events", response_model=EventResponse)
-def add_event(req: EventRequest) -> EventResponse:
-    """Stub for event creation."""
-    return EventResponse(description=req.description)
+class SkipDateRequest(BaseModel):
+    date: date
+
+
+@app.post("/events", response_model=EventOut)
+def create_event(req: EventCreate, db: Session = Depends(get_db)) -> EventOut:
+    """Create a calendar event with optional repetition and skipped dates."""
+    event = Event(time=req.time, description=req.description, cron=req.cron)
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    for d in req.skipped_dates:
+        db.add(EventSkip(event_id=event.id, date=d))
+    db.commit()
+    db.refresh(event)
+    return EventOut(
+        id=event.id,
+        time=event.time,
+        description=event.description,
+        cron=event.cron,
+        skipped_dates=[s.date for s in event.skips],
+    )
+
+
+@app.post("/events/{event_id}/skip", response_model=EventOut)
+def skip_event(event_id: int, req: SkipDateRequest, db: Session = Depends(get_db)) -> EventOut:
+    """Skip a single occurrence of an event on a specific date."""
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    db.add(EventSkip(event_id=event_id, date=req.date))
+    db.commit()
+    db.refresh(event)
+    return EventOut(
+        id=event.id,
+        time=event.time,
+        description=event.description,
+        cron=event.cron,
+        skipped_dates=[s.date for s in event.skips],
+    )
 
 
 class Clarification(BaseModel):

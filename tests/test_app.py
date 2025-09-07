@@ -61,3 +61,4 @@ def test_goal_flow(client):
     )
     assert update_resp.status_code == 200
     assert update_resp.json()["is_done"] is True
+
