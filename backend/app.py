@@ -1,10 +1,12 @@
 import os
-from datetime import datetime, date
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import FastAPI, Depends, HTTPException
+
 from pydantic import BaseModel
 from typing import List, Optional
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, ForeignKey, JSON
+from sqlalchemy.orm import sessionmaker, declarative_base, relationship, Session
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
@@ -12,6 +14,44 @@ from .database import Base, SessionLocal, engine
 from .models import Event, EventSkip
 
 load_dotenv()
+
+# Default to a local PostgreSQL instance but allow override via DATABASE_URL
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", "postgresql://postgres:postgres@localhost/postgres"
+)
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL, connect_args=connect_args)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+
+class Goal(Base):
+    __tablename__ = "goals"
+    id = Column(Integer, primary_key=True, index=True)
+    description = Column(String, nullable=False)
+    clarifications = Column(JSON, default=list)
+    steps = relationship("GoalStep", back_populates="goal", cascade="all, delete-orphan")
+
+
+class GoalStep(Base):
+    __tablename__ = "goal_steps"
+    id = Column(Integer, primary_key=True, index=True)
+    goal_id = Column(Integer, ForeignKey("goals.id"), nullable=False)
+    description = Column(String, nullable=False)
+    is_done = Column(Boolean, default=False)
+    goal = relationship("Goal", back_populates="steps")
+
+
+Base.metadata.create_all(bind=engine)
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 
 app = FastAPI(title="Initio Backend")
 
@@ -121,19 +161,87 @@ def skip_event(event_id: int, req: SkipDateRequest, db: Session = Depends(get_db
     )
 
 
+class Clarification(BaseModel):
+    question: str
+    answer: str
+
+
 class GoalRequest(BaseModel):
     goal: str
 
 
 class GoalResponse(BaseModel):
+    goal_id: int
+    clarifications: List[Clarification]
     steps: List[str]
 
 
+class GoalStepResponse(BaseModel):
+    id: int
+    description: str
+    is_done: bool
+
+    class Config:
+        orm_mode = True
+
+
+class GoalStepUpdate(BaseModel):
+    is_done: bool
+
+
 @app.post("/goals", response_model=GoalResponse)
-def set_goal(req: GoalRequest) -> GoalResponse:
-    """Return a single stub step for a goal."""
-    step = f"Шаг 1 для цели '{req.goal}'"
-    return GoalResponse(steps=[step])
+async def set_goal(req: GoalRequest, db: Session = Depends(get_db)) -> GoalResponse:
+    """Generate clarifying questions and steps for a goal and store them."""
+    clarify_prompt = (
+        f"Пользователь поставил цель: '{req.goal}'. "
+        "Сформулируй два уточняющих вопроса и ответь на них. "
+        "Формат каждой строки: Вопрос: <вопрос> Ответ: <ответ>"
+    )
+    qa_text = await generate_response(clarify_prompt)
+    clarifications: List[Clarification] = []
+    for line in qa_text.splitlines():
+        if "Вопрос:" in line and "Ответ:" in line:
+            q_part, a_part = line.split("Ответ:", 1)
+            question = q_part.split("Вопрос:", 1)[1].strip()
+            answer = a_part.strip()
+            clarifications.append(Clarification(question=question, answer=answer))
+
+    steps_prompt = (
+        f"Перечисли шаги для достижения цели: '{req.goal}'. "
+        "Каждый шаг с новой строки без нумерации."
+    )
+    steps_text = await generate_response(steps_prompt)
+    steps = [s.strip("- ").strip() for s in steps_text.splitlines() if s.strip()]
+
+    goal = Goal(description=req.goal, clarifications=[c.dict() for c in clarifications])
+    db.add(goal)
+    db.flush()
+    for step_desc in steps:
+        db.add(GoalStep(goal_id=goal.id, description=step_desc))
+    db.commit()
+    return GoalResponse(goal_id=goal.id, clarifications=clarifications, steps=steps)
+
+
+@app.get("/goals/{goal_id}/steps", response_model=List[GoalStepResponse])
+def get_goal_steps(goal_id: int, db: Session = Depends(get_db)) -> List[GoalStepResponse]:
+    steps = db.query(GoalStep).filter_by(goal_id=goal_id).all()
+    return steps
+
+
+@app.patch("/goals/{goal_id}/steps/{step_id}", response_model=GoalStepResponse)
+def update_goal_step(
+    goal_id: int,
+    step_id: int,
+    update: GoalStepUpdate,
+    db: Session = Depends(get_db),
+) -> GoalStepResponse:
+    step = db.query(GoalStep).filter_by(goal_id=goal_id, id=step_id).first()
+    if not step:
+        raise HTTPException(status_code=404, detail="Step not found")
+    step.is_done = update.is_done
+    db.commit()
+    db.refresh(step)
+    return step
 
 
 class ProductRequest(BaseModel):
