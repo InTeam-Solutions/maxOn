@@ -6,3 +6,4 @@ python-dotenv
 
 SQLAlchemy
 psycopg2-binary
+python-telegram-bot
