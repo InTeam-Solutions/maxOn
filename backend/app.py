@@ -1,58 +1,18 @@
 import os
-
 import httpx
 from fastapi import FastAPI, Depends, HTTPException
 
 from pydantic import BaseModel
 from typing import List, Optional
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, ForeignKey, JSON
-from sqlalchemy.orm import sessionmaker, declarative_base, relationship, Session
-from dotenv import load_dotenv
+from datetime import datetime, date
+
 from sqlalchemy.orm import Session
+from dotenv import load_dotenv
 
 from .database import Base, SessionLocal, engine
-from .models import Event, EventSkip
+from .models import Event, EventSkip, Goal, GoalStep
 
 load_dotenv()
-
-# Default to a local PostgreSQL instance but allow override via DATABASE_URL
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", "postgresql://postgres:postgres@localhost/postgres"
-)
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
-engine = create_engine(DATABASE_URL, connect_args=connect_args)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-
-class Goal(Base):
-    __tablename__ = "goals"
-    id = Column(Integer, primary_key=True, index=True)
-    description = Column(String, nullable=False)
-    clarifications = Column(JSON, default=list)
-    steps = relationship("GoalStep", back_populates="goal", cascade="all, delete-orphan")
-
-
-class GoalStep(Base):
-    __tablename__ = "goal_steps"
-    id = Column(Integer, primary_key=True, index=True)
-    goal_id = Column(Integer, ForeignKey("goals.id"), nullable=False)
-    description = Column(String, nullable=False)
-    is_done = Column(Boolean, default=False)
-    goal = relationship("Goal", back_populates="steps")
-
-
-Base.metadata.create_all(bind=engine)
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
 app = FastAPI(title="Initio Backend")
 
 Base.metadata.create_all(bind=engine)
