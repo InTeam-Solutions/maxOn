@@ -78,18 +78,10 @@ async def handle_message(message: types.Message):
             set_id = summary.get("set_id")
             items = summary.get("items")
             if items is None and set_id:
-                items = get_items_from_set(set_id, user_id=user_id)
+                items = get_items_from_set(set_id, str(message.from_user.id))
+            rendered = render_events(items or [], title=summary.get("text"))
+            await message.answer(rendered, parse_mode="HTML")
 
-            if not items:
-                await message.answer("События не найдены.")
-            else:
-                lines = []
-                for i, e in enumerate(items, 1):
-                    date = e.get("date") or ""
-                    time = e.get("time") or ""
-                    tt = f"{date} {time}".strip()
-                    lines.append(f"{i}. <b>{e.get('title','(без названия)')}</b> — {tt}")
-                await message.answer("\n".join(lines), parse_mode="HTML")
 
     except Exception:
         logger.exception("Ошибка при обработке сообщения")

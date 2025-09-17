@@ -8,6 +8,7 @@ from dateutil import parser as dtparser
 from mvp.core.db import get_db, Base
 from mvp.core.models import Event
 from mvp.core.selectors import EventSelector, EventPatch
+from mvp.core.sets import save_set, get_items_from_set
 
 # --- Схема ----
 def ensure_schema():
@@ -41,21 +42,6 @@ def add_event(user_id: str, title: str, date: str, time: Optional[str] = None,
         s.flush()
         return ev.to_dict()
 
-# --- Кэш последних выборок для set_id ---
-_LAST_SETS: Dict[str, List[Dict[str, Any]]] = {}  # set_id -> list[event_dict]
-
-def _save_set(items: List[Dict[str, Any]]) -> str:
-    set_id = str(uuid4())
-    _LAST_SETS[set_id] = items
-    return set_id
-
-def _resolve_from_set(set_id: str, ordinal: int) -> List[Dict[str, Any]]:
-    items = _LAST_SETS.get(set_id, []) or []
-    if not items:
-        return []
-    idx = max(0, min(len(items) - 1, (ordinal or 1) - 1))
-    return [items[idx]]
-
 # --- Поиск событий (ILIKE + фильтры по датам/времени) ---
 def search_events(user_id: str, selector: EventSelector) -> Tuple[str, List[Dict[str, Any]]]:
     db = get_db()
@@ -79,8 +65,8 @@ def search_events(user_id: str, selector: EventSelector) -> Tuple[str, List[Dict
 
         q = q.order_by(Event.date.asc(), Event.time.asc().nullsfirst()).limit(selector.limit)
         items = [e.to_dict() for e in q.all()]
-
-        set_id = _save_set(items)
+        
+        set_id = save_set(user_id, items)
         return set_id, items
 
 # --- Универсальная мутация (create/update/delete) + dry_run ---
@@ -118,7 +104,11 @@ def mutate_events(user_id: str, operation: str, selector: EventSelector,
 
     # UPDATE / DELETE → определяем целевые события
     if selector.set_id and selector.ordinal:
-        targets = _resolve_from_set(selector.set_id, selector.ordinal)
+        items = get_items_from_set(selector.set_id, user_id)
+        if not items:
+            return {"changed": [], "preview": []}
+        idx = max(0, min(len(items) - 1, (selector.ordinal or 1) - 1))
+        targets = [items[idx]]
     else:
         _, targets = search_events(user_id, selector)
 
