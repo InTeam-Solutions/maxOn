@@ -189,3 +189,53 @@ def update_step_status(
     session.flush()
 
     return step.to_dict()
+
+
+def update_step(
+    session: Session,
+    step_id: int,
+    user_id: str,
+    title: Optional[str] = None,
+    estimated_hours: Optional[float] = None
+) -> Optional[Dict[str, Any]]:
+    """Update step title and/or estimated hours"""
+    step = session.query(Step).join(Goal).filter(
+        Step.id == step_id,
+        Goal.user_id == user_id
+    ).first()
+
+    if not step:
+        return None
+
+    if title is not None:
+        step.title = title.strip()
+    if estimated_hours is not None:
+        step.estimated_hours = estimated_hours
+
+    session.flush()
+    return step.to_dict()
+
+
+def delete_step(
+    session: Session,
+    step_id: int,
+    user_id: str
+) -> bool:
+    """Delete a step and recalculate goal progress"""
+    step = session.query(Step).join(Goal).filter(
+        Step.id == step_id,
+        Goal.user_id == user_id
+    ).first()
+
+    if not step:
+        return False
+
+    goal = step.goal
+    session.delete(step)
+    session.flush()
+
+    # Update goal progress
+    goal.update_progress()
+    session.flush()
+
+    return True

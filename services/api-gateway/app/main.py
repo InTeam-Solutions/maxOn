@@ -9,6 +9,7 @@ from aiogram.client.default import DefaultBotProperties
 import httpx
 
 from app.renderer import render_events, render_goals, render_products, render_cart, render_goals_list, render_goal_detail
+from shared.utils.analytics import track_event, increment_user_counter, set_user_profile
 
 # --- Logging ---
 logging.basicConfig(
@@ -21,6 +22,8 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://orchestrator:8001")
 CORE_SERVICE_URL = os.getenv("CORE_SERVICE_URL", "http://core:8004")
+LLM_SERVICE_URL = os.getenv("LLM_SERVICE_URL", "http://llm:8003")
+CONTEXT_SERVICE_URL = os.getenv("CONTEXT_SERVICE_URL", "http://context:8002")
 
 if not BOT_TOKEN:
     raise RuntimeError("TELEGRAM_BOT_TOKEN is required")
@@ -38,9 +41,112 @@ http_client = httpx.AsyncClient(timeout=30.0)
 
 # --- Handlers ---
 
+async def get_dashboard_stats(user_id: str) -> str:
+    """Get user dashboard with upcoming events and goals progress"""
+    try:
+        from datetime import datetime, timedelta
+        import random
+
+        stats_lines = []
+
+        # Get upcoming events (next 3 days)
+        today = datetime.now().date()
+        three_days = today + timedelta(days=3)
+
+        events_response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/events",
+            params={
+                "user_id": user_id,
+                "start_date": today.isoformat(),
+                "end_date": three_days.isoformat()
+            }
+        )
+
+        if events_response.status_code == 200:
+            events = events_response.json()
+            if events:
+                stats_lines.append("📅 <b>Ближайшие события:</b>")
+                for event in events[:3]:  # First 3
+                    title = event.get("title", "Событие")
+                    date = event.get("date", "")
+                    time = event.get("time", "")
+
+                    # Format date
+                    try:
+                        date_obj = datetime.fromisoformat(date)
+                        weekday = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"][date_obj.weekday()]
+                        date_str = f"{weekday}, {date_obj.strftime('%d.%m')}"
+                    except:
+                        date_str = date
+
+                    time_str = f" в {time}" if time else ""
+                    stats_lines.append(f"  • {title} — {date_str}{time_str}")
+                stats_lines.append("")
+
+        # Get active goals
+        goals_response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/goals",
+            params={"user_id": user_id, "status": "active"}
+        )
+
+        if goals_response.status_code == 200:
+            goals = goals_response.json()
+            if goals:
+                stats_lines.append("🎯 <b>Твои цели:</b>")
+                total_progress = sum(g.get("progress_percent", 0) for g in goals) / len(goals) if goals else 0
+                stats_lines.append(f"  Общий прогресс: <b>{total_progress:.0f}%</b>")
+
+                completed_goals = len([g for g in goals if g.get("status") == "completed"])
+                stats_lines.append(f"  Активных целей: <b>{len(goals)}</b>")
+
+                # Random goal motivation
+                if goals:
+                    random_goal = random.choice(goals)
+                    goal_title = random_goal.get("title", "")
+                    goal_progress = random_goal.get("progress_percent", 0)
+
+                    if goal_progress < 30:
+                        motivation = "Начни работать над ней сегодня! 💪"
+                    elif goal_progress < 70:
+                        motivation = "Продолжай в том же духе! 🔥"
+                    else:
+                        motivation = "Ты почти у цели! 🚀"
+
+                    stats_lines.append(f"\n💡 <i>Напоминаю о цели: {goal_title}</i>")
+                    stats_lines.append(f"  {motivation}")
+            else:
+                stats_lines.append("🎯 <i>У тебя пока нет целей. Создай свою первую!</i>")
+
+        if not stats_lines:
+            return "📊 <i>Пока нет данных для отображения</i>"
+
+        return "\n".join(stats_lines)
+
+    except Exception as e:
+        logger.exception(f"Error getting dashboard stats: {e}")
+        return "📊 <i>Не удалось загрузить статистику</i>"
+
+
 @dp.message(CommandStart())
 async def cmd_start(message: Message):
     """Handle /start command"""
+    user_id = str(message.from_user.id)
+
+    # Track user start
+    track_event(user_id, "Bot Started", {
+        "username": message.from_user.username,
+        "first_name": message.from_user.first_name,
+        "language_code": message.from_user.language_code
+    })
+    set_user_profile(user_id, {
+        "$name": message.from_user.full_name,
+        "username": message.from_user.username,
+        "language": message.from_user.language_code or "ru"
+    })
+
+    # Get dashboard stats
+    stats = await get_dashboard_stats(user_id)
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="🎯 Мои цели", callback_data="show_goals"),
@@ -53,12 +159,10 @@ async def cmd_start(message: Message):
     ])
 
     await message.answer(
-        "👋 Привет! Я твой персональный коуч.\n\n"
-        "Я помогу тебе:\n"
-        "• 🎯 Достигать целей с пошаговым планом\n"
-        "• 📅 Управлять календарем и событиями\n"
-        "• 💪 Оставаться мотивированным\n\n"
-        "Используй кнопки ниже или просто напиши мне:",
+        f"👋 <b>Привет! Я твой персональный коуч.</b>\n\n"
+        f"{stats}\n\n"
+        f"Используй кнопки ниже или просто напиши мне:",
+        parse_mode="HTML",
         reply_markup=keyboard
     )
 
@@ -251,6 +355,23 @@ async def callback_new_event(callback: CallbackQuery):
 async def callback_main_menu(callback: CallbackQuery):
     """Handle main_menu button - return to start"""
     await callback.answer()
+    user_id = str(callback.from_user.id)
+
+    # Reset session state (exit any editing mode)
+    try:
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "idle",
+                "context": {},
+                "expiry_hours": 1
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error resetting session state: {e}")
+
+    # Get dashboard stats
+    stats = await get_dashboard_stats(user_id)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -264,8 +385,9 @@ async def callback_main_menu(callback: CallbackQuery):
     ])
 
     await callback.message.edit_text(
-        "🏠 <b>Главное меню</b>\n\n"
-        "Выбери действие или просто напиши мне что-нибудь:",
+        f"🏠 <b>Главное меню</b>\n\n"
+        f"{stats}\n\n"
+        f"Выбери действие или просто напиши мне что-нибудь:",
         parse_mode="HTML",
         reply_markup=keyboard
     )
@@ -319,6 +441,11 @@ async def callback_view_goal(callback: CallbackQuery):
                     )
                 ])
 
+            # Add edit button
+            step_buttons.append([
+                InlineKeyboardButton(text="✏️ Поправить шаги", callback_data=f"edit_goal_steps_{goal_id}")
+            ])
+
             # Add navigation buttons
             step_buttons.append([
                 InlineKeyboardButton(text="◀️ К списку целей", callback_data="show_goals"),
@@ -342,11 +469,103 @@ async def callback_view_goal(callback: CallbackQuery):
         )
 
 
+@dp.callback_query(F.data.startswith("edit_goal_steps_"))
+async def callback_edit_goal_steps(callback: CallbackQuery):
+    """Handle edit_goal_steps_{goal_id} button - enter edit mode"""
+    await callback.answer()
+
+    goal_id = callback.data.split("_")[-1]
+    user_id = str(callback.from_user.id)
+
+    try:
+        # Get goal details
+        goal_response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/goals/{goal_id}",
+            params={"user_id": user_id}
+        )
+
+        if goal_response.status_code == 200:
+            goal = goal_response.json()
+            goal_title = goal.get("title", "цели")
+
+            # Update session state to editing mode
+            await http_client.put(
+                f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+                json={
+                    "current_state": "editing_goal_steps",
+                    "context": {
+                        "editing_goal_id": int(goal_id),
+                        "goal_title": goal_title
+                    },
+                    "expiry_hours": 2
+                }
+            )
+
+            # Show instruction message
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отменить редактирование", callback_data=f"cancel_edit_{goal_id}")],
+                [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")]
+            ])
+
+            await callback.message.edit_text(
+                f"✏️ <b>Режим редактирования шагов</b>\n\n"
+                f"Цель: <i>{goal_title}</i>\n\n"
+                f"Теперь ты можешь попросить меня:\n"
+                f"• Добавить новый шаг\n"
+                f"• Изменить формулировку шага\n"
+                f"• Удалить шаг\n"
+                f"• Изменить порядок шагов\n\n"
+                f"Просто напиши мне что нужно изменить, например:\n"
+                f"<i>\"Добавь шаг: изучить основы Python\"</i>\n"
+                f"<i>\"Удали третий шаг\"</i>\n"
+                f"<i>\"Переформулируй первый шаг на более простой язык\"</i>\n\n"
+                f"💡 Я работаю только с этой целью, пока ты не выйдешь из режима редактирования.",
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+
+        else:
+            await callback.answer("Не удалось загрузить цель", show_alert=True)
+
+    except Exception as e:
+        logger.exception(f"Error entering edit mode for goal {goal_id}: {e}")
+        await callback.answer("Произошла ошибка", show_alert=True)
+
+
+@dp.callback_query(F.data.startswith("cancel_edit_"))
+async def callback_cancel_edit(callback: CallbackQuery):
+    """Cancel editing mode and return to goal view"""
+    await callback.answer()
+
+    goal_id = callback.data.split("_")[-1]
+    user_id = str(callback.from_user.id)
+
+    try:
+        # Reset session state
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "idle",
+                "context": {},
+                "expiry_hours": 1
+            }
+        )
+
+        # Return to goal view - trigger view_goal callback
+        await callback.message.edit_text("Возвращаюсь к просмотру цели...")
+
+        # Simulate view_goal callback
+        callback.data = f"view_goal_{goal_id}"
+        await callback_view_goal(callback)
+
+    except Exception as e:
+        logger.exception(f"Error cancelling edit mode: {e}")
+        await callback.answer("Произошла ошибка", show_alert=True)
+
+
 @dp.callback_query(F.data.startswith("toggle_step_"))
 async def callback_toggle_step(callback: CallbackQuery):
     """Handle toggle_step_{step_id}_{goal_id} button - mark step as completed/pending"""
-    await callback.answer()
-
     parts = callback.data.split("_")
     step_id = parts[2]
     goal_id = parts[3]
@@ -438,6 +657,8 @@ async def callback_toggle_step(callback: CallbackQuery):
                         await callback.answer("✅ Шаг отмечен как выполненный!", show_alert=False)
                     else:
                         await callback.answer("⭕ Шаг отмечен как невыполненный", show_alert=False)
+                else:
+                    await callback.answer("Не удалось обновить цель", show_alert=True)
             else:
                 await callback.answer("Не удалось обновить шаг", show_alert=True)
         else:
@@ -446,6 +667,150 @@ async def callback_toggle_step(callback: CallbackQuery):
     except Exception as e:
         logger.exception(f"Error toggling step {step_id}: {e}")
         await callback.answer("Произошла ошибка", show_alert=True)
+
+
+@dp.message(F.voice)
+async def handle_voice(message: types.Message):
+    """Handle voice messages - transcribe and process"""
+    user_id = str(message.from_user.id)
+    logger.info(f"[{user_id}] Received voice message")
+
+    # Send "typing" action
+    await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")
+
+    try:
+        # Download voice file
+        voice = message.voice
+        file = await message.bot.get_file(voice.file_id)
+        voice_bytes = await message.bot.download_file(file.file_path)
+
+        # Transcribe via LLM service
+        logger.info(f"[{user_id}] Transcribing voice message...")
+
+        # Track voice message received
+        track_event(user_id, "Message Received", {
+            "message_type": "voice",
+            "audio_duration": voice.duration
+        })
+        increment_user_counter(user_id, "total_messages", 1)
+
+        transcribe_response = await http_client.post(
+            f"{LLM_SERVICE_URL}/api/transcribe",
+            content=voice_bytes.read(),
+            headers={"Content-Type": "application/octet-stream"},
+            params={"user_id": user_id}
+        )
+
+        if transcribe_response.status_code != 200:
+            logger.error(f"Transcription error: {transcribe_response.status_code} {transcribe_response.text}")
+            await message.answer("😔 Не удалось распознать голосовое сообщение. Попробуй ещё раз.")
+            return
+
+        transcription = transcribe_response.json()
+        user_msg = transcription.get("text", "")
+
+        if not user_msg:
+            await message.answer("😔 Не удалось распознать речь. Попробуй ещё раз.")
+            return
+
+        logger.info(f"[{user_id}] Transcribed: {user_msg[:50]}...")
+
+        # Show transcribed text to user
+        await message.answer(f"🎤 <i>Распознано: {user_msg}</i>", parse_mode="HTML")
+
+        # Process as regular text message
+        response = await http_client.post(
+            f"{ORCHESTRATOR_URL}/api/process",
+            json={
+                "user_id": user_id,
+                "message": user_msg
+            },
+            timeout=30.0
+        )
+
+        if response.status_code != 200:
+            logger.error(f"Orchestrator error: {response.status_code} {response.text}")
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🏠 Вернуться в меню", callback_data="main_menu")]
+            ])
+            await message.answer(
+                "😔 Упс, что-то пошло не так.\n\n"
+                "Попробуй ещё раз или вернись в главное меню.",
+                reply_markup=keyboard
+            )
+            return
+
+        result = response.json()
+        logger.info(f"[{user_id}] Orchestrator response: {result}")
+
+        if not result.get("success"):
+            error = result.get("error", "Неизвестная ошибка")
+            logger.error(f"[{user_id}] Processing failed: {error}")
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")]
+            ])
+            await message.answer(
+                f"😔 Произошла ошибка: {error}\n\n"
+                "Попробуй переформулировать запрос или вернись в меню.",
+                reply_markup=keyboard
+            )
+            return
+
+        # Handle response (same logic as text messages)
+        response_type = result.get("response_type", "text")
+        text = result.get("text")
+
+        if response_type == "table":
+            items = result.get("items", [])
+            if items:
+                if items[0].get("date"):  # Events
+                    rendered = render_events(items, title=text or "События")
+                    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                        [
+                            InlineKeyboardButton(text="➕ Новое событие", callback_data="new_event"),
+                            InlineKeyboardButton(text="🏠 Меню", callback_data="main_menu")
+                        ]
+                    ])
+                    await message.answer(rendered, parse_mode="HTML", reply_markup=keyboard)
+                elif items[0].get("steps"):  # Goals
+                    rendered = render_goals(items, title=text or "Цели")
+                    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                        [
+                            InlineKeyboardButton(text="➕ Новая цель", callback_data="new_goal"),
+                            InlineKeyboardButton(text="🏠 Меню", callback_data="main_menu")
+                        ]
+                    ])
+                    await message.answer(rendered, parse_mode="HTML", reply_markup=keyboard)
+                elif items[0].get("price"):  # Products
+                    rendered = render_products(items, title=text or "Товары")
+                    await message.answer(rendered, parse_mode="HTML")
+        elif text:
+            if "цель" in text.lower() and ("создал" in text.lower() or "отлично" in text.lower()):
+                await message.react([types.ReactionTypeEmoji(emoji="🎉")])
+            elif "удалил" in text.lower():
+                await message.react([types.ReactionTypeEmoji(emoji="👍")])
+            await message.answer(text)
+
+    except httpx.TimeoutException:
+        logger.error(f"[{user_id}] Request timeout")
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔄 Попробовать снова", callback_data="main_menu")]
+        ])
+        await message.answer(
+            "⏱️ Запрос занял слишком много времени.\n\n"
+            "Пожалуйста, попробуй ещё раз.",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.exception(f"[{user_id}] Error processing voice message")
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")]
+        ])
+        await message.answer(
+            "😔 Упс, произошла ошибка при обработке голосового сообщения.\n\n"
+            "Попробуй ещё раз.",
+            reply_markup=keyboard
+        )
 
 
 @dp.message()
@@ -458,6 +823,13 @@ async def handle_message(message: types.Message):
         return
 
     logger.info(f"[{user_id}] Received: {user_msg[:50]}...")
+
+    # Track message received
+    track_event(user_id, "Message Received", {
+        "message_type": "text",
+        "message_length": len(user_msg)
+    })
+    increment_user_counter(user_id, "total_messages", 1)
 
     # Send "typing" action for better UX
     await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")

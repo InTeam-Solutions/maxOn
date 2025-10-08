@@ -5,6 +5,7 @@ import logging
 import os
 
 from shared.utils.logger import setup_logger
+from shared.utils.analytics import track_event, increment_user_counter
 from app.state_machine import StateMachine, DialogState
 import httpx
 
@@ -353,12 +354,113 @@ async def execute_intent(intent: str, params: Dict[str, Any], user_id: str) -> D
             if not target_step:
                 return {"success": False, "error": "Шаг не найден"}
 
-            # Update step status
-            new_status = params.get("new_status", "completed")
-            response = http_client.put(
-                f"{CORE_SERVICE_URL}/api/steps/{target_step['id']}/status",
-                json={"status": new_status}
+            # Update step status or title
+            new_status = params.get("new_status")
+            new_title = params.get("new_title")
+
+            if new_status:
+                # Update status
+                http_client.put(
+                    f"{CORE_SERVICE_URL}/api/steps/{target_step['id']}/status",
+                    json={"status": new_status, "user_id": user_id}
+                )
+
+            if new_title:
+                # Update title
+                http_client.put(
+                    f"{CORE_SERVICE_URL}/api/steps/{target_step['id']}",
+                    params={"user_id": user_id},
+                    json={"title": new_title}
+                )
+
+            # Return updated goal
+            updated_goal = http_client.get(f"{CORE_SERVICE_URL}{endpoint}/{matching_goal['id']}", params={"user_id": user_id})
+            return updated_goal.json()
+        elif action == "add_step":
+            # Find goal by title
+            goal_title = params.get("goal_title")
+            search_response = http_client.get(f"{CORE_SERVICE_URL}{endpoint}", params={"user_id": user_id})
+            goals = search_response.json()
+
+            # Find matching goal
+            matching_goal = None
+            if goal_title:
+                for goal in goals:
+                    if goal_title.lower() in goal["title"].lower():
+                        matching_goal = goal
+                        break
+            elif len(goals) == 1:
+                matching_goal = goals[0]
+
+            if not matching_goal:
+                return {"success": False, "error": "Цель не найдена"}
+
+            # Add step
+            step_title = params.get("step_title")
+            estimated_hours = params.get("estimated_hours")
+
+            response = http_client.post(
+                f"{CORE_SERVICE_URL}{endpoint}/{matching_goal['id']}/steps",
+                params={"user_id": user_id},
+                json={
+                    "title": step_title,
+                    "order": len(matching_goal.get("steps", [])),
+                    "estimated_hours": estimated_hours
+                }
             )
+
+            if response.status_code != 201:
+                return {"success": False, "error": "Не удалось добавить шаг"}
+
+            # Return updated goal
+            updated_goal = http_client.get(f"{CORE_SERVICE_URL}{endpoint}/{matching_goal['id']}", params={"user_id": user_id})
+            return updated_goal.json()
+        elif action == "delete_step":
+            # Find goal by title
+            goal_title = params.get("goal_title")
+            search_response = http_client.get(f"{CORE_SERVICE_URL}{endpoint}", params={"user_id": user_id})
+            goals = search_response.json()
+
+            # Find matching goal
+            matching_goal = None
+            if goal_title:
+                for goal in goals:
+                    if goal_title.lower() in goal["title"].lower():
+                        matching_goal = goal
+                        break
+            elif len(goals) == 1:
+                matching_goal = goals[0]
+
+            if not matching_goal:
+                return {"success": False, "error": "Цель не найдена"}
+
+            if not matching_goal.get("steps"):
+                return {"success": False, "error": "У цели нет шагов"}
+
+            # Find step by number or title
+            step_number = params.get("step_number")
+            step_title = params.get("step_title")
+            target_step = None
+
+            if step_number and 1 <= step_number <= len(matching_goal["steps"]):
+                target_step = matching_goal["steps"][step_number - 1]
+            elif step_title:
+                for step in matching_goal["steps"]:
+                    if step_title.lower() in step["title"].lower():
+                        target_step = step
+                        break
+
+            if not target_step:
+                return {"success": False, "error": "Шаг не найден"}
+
+            # Delete step
+            response = http_client.delete(
+                f"{CORE_SERVICE_URL}/api/steps/{target_step['id']}",
+                params={"user_id": user_id}
+            )
+
+            if response.status_code not in [200, 204]:
+                return {"success": False, "error": "Не удалось удалить шаг"}
 
             # Return updated goal
             updated_goal = http_client.get(f"{CORE_SERVICE_URL}{endpoint}/{matching_goal['id']}", params={"user_id": user_id})
@@ -511,6 +613,13 @@ async def process_message(request: ProcessMessageRequest):
         # Step 4: Execute intent via Core
         core_result = await execute_intent(intent, params, user_id)
         logger.info(f"[{user_id}] Core result: {core_result}")
+
+        # Track intent execution
+        track_event(user_id, "Intent Executed", {
+            "intent": intent,
+            "success": core_result.get("success", True) if isinstance(core_result, dict) else True,
+            "state": current_state
+        })
 
         # Step 5: Check state transitions
         new_state = StateMachine.should_transition(current_state, intent, {**session_context, **params})

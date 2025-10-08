@@ -321,6 +321,11 @@ class StepStatusUpdate(BaseModel):
     user_id: str
 
 
+class StepUpdate(BaseModel):
+    title: Optional[str] = None
+    estimated_hours: Optional[float] = None
+
+
 @app.put("/api/steps/{step_id}/status", response_model=StepResponse)
 async def update_step_status(step_id: int, update: StepStatusUpdate):
     """Update step status"""
@@ -343,6 +348,56 @@ async def update_step_status(step_id: int, update: StepStatusUpdate):
         raise
     except Exception as e:
         logger.error(f"Error updating step status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/steps/{step_id}", response_model=StepResponse)
+async def update_step(step_id: int, user_id: str, update: StepUpdate):
+    """Update step title and/or estimated hours"""
+    try:
+        db = get_db()
+        with db.session_ctx() as session:
+            result = goals_service.update_step(
+                session=session,
+                step_id=step_id,
+                user_id=user_id,
+                title=update.title,
+                estimated_hours=update.estimated_hours
+            )
+
+        if not result:
+            raise HTTPException(status_code=404, detail="Step not found")
+
+        logger.info(f"Updated step {step_id}")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating step: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/steps/{step_id}")
+async def delete_step(step_id: int, user_id: str):
+    """Delete a step"""
+    try:
+        db = get_db()
+        with db.session_ctx() as session:
+            success = goals_service.delete_step(
+                session=session,
+                step_id=step_id,
+                user_id=user_id
+            )
+
+        if not success:
+            raise HTTPException(status_code=404, detail="Step not found")
+
+        logger.info(f"Deleted step {step_id}")
+        return {"status": "deleted", "id": step_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting step: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

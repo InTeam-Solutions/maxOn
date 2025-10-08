@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -12,6 +12,7 @@ from openai import OpenAI
 import redis
 
 from shared.utils.logger import setup_logger
+from shared.utils.analytics import track_event, increment_user_counter
 from app.prompts.system import SYSTEM_PROMPT_TEMPLATE
 from app.prompts.summarizer import SUMMARIZE_PROMPT_TEMPLATE
 from app.prompts.goal_coach import GOAL_STEPS_PROMPT_TEMPLATE
@@ -27,6 +28,9 @@ logger = setup_logger("llm_service", level=os.getenv("LOG_LEVEL", "INFO"))
 
 # OpenAI client with proxy
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.proxyapi.ru/openai/v1")
+OPENAI_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o")
+OPENAI_WHISPER_MODEL = os.getenv("OPENAI_WHISPER_MODEL", "whisper-1")
+
 openai_client = OpenAI(
     api_key=os.getenv("OPENAI_API_KEY"),
     base_url=OPENAI_BASE_URL
@@ -166,6 +170,8 @@ async def parse_message(request: ParseRequest):
     with context injection
     """
     try:
+        user_id = request.context.get("profile", {}).get("user_id", "unknown")
+
         # Check cache
         cache_key = get_cache_key("parse", f"{request.message}:{json.dumps(request.context)}")
         cached = get_from_cache(cache_key)
@@ -178,7 +184,7 @@ async def parse_message(request: ParseRequest):
 
         # Call OpenAI
         response = openai_client.chat.completions.create(
-            model="gpt-4o",
+            model=OPENAI_CHAT_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": request.message},
@@ -188,6 +194,18 @@ async def parse_message(request: ParseRequest):
 
         raw = response.choices[0].message.content.strip()
         result = json.loads(raw)
+
+        # Track to Mixpanel
+        usage = response.usage
+        track_event(user_id, "LLM Parse", {
+            "model": OPENAI_CHAT_MODEL,
+            "intent": result.get("intent"),
+            "tokens_input": usage.prompt_tokens,
+            "tokens_output": usage.completion_tokens,
+            "tokens_total": usage.total_tokens,
+            "message_length": len(request.message)
+        })
+        increment_user_counter(user_id, "total_parse_tokens", usage.total_tokens)
 
         # Cache result
         set_to_cache(cache_key, result, ttl=3600)  # 1 hour
@@ -214,7 +232,7 @@ async def summarize_response(request: SummarizeRequest):
 
         # Call OpenAI
         response = openai_client.chat.completions.create(
-            model="gpt-4o",
+            model=OPENAI_CHAT_MODEL,
             messages=[
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": json.dumps(request.core_result, ensure_ascii=False)},
@@ -242,6 +260,9 @@ async def generate_steps(request: GenerateStepsRequest):
     Generate steps for a goal using LLM
     """
     try:
+        # Extract user_id from additional_context if available
+        user_id = "unknown"
+
         # Check cache
         cache_key = get_cache_key("steps", f"{request.goal_title}:{request.current_level}:{request.time_commitment}")
         cached = get_from_cache(cache_key)
@@ -259,7 +280,7 @@ async def generate_steps(request: GenerateStepsRequest):
 
         # Call OpenAI
         response = openai_client.chat.completions.create(
-            model="gpt-4o",
+            model=OPENAI_CHAT_MODEL,
             messages=[
                 {"role": "system", "content": "Ты — коуч по достижению целей. Создавай конкретные, действенные микрошаги."},
                 {"role": "user", "content": prompt},
@@ -276,6 +297,18 @@ async def generate_steps(request: GenerateStepsRequest):
             raw = raw.split("```")[1].split("```")[0].strip()
 
         result = json.loads(raw)
+
+        # Track to Mixpanel
+        usage = response.usage
+        track_event(user_id, "LLM Generate Steps", {
+            "model": OPENAI_CHAT_MODEL,
+            "goal_title": request.goal_title,
+            "steps_count": len(result),
+            "tokens_input": usage.prompt_tokens,
+            "tokens_output": usage.completion_tokens,
+            "tokens_total": usage.total_tokens
+        })
+        increment_user_counter(user_id, "total_steps_tokens", usage.total_tokens)
 
         # Cache result
         set_to_cache(cache_key, result, ttl=86400)  # 24 hours
@@ -300,7 +333,7 @@ async def chat(request: ChatRequest):
         system = request.system_prompt or "Ты — дружелюбный ассистент. Отвечай кратко и по делу."
 
         response = openai_client.chat.completions.create(
-            model="gpt-4o",
+            model=OPENAI_CHAT_MODEL,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": request.message},
@@ -316,6 +349,51 @@ async def chat(request: ChatRequest):
 
     except Exception as e:
         logger.error(f"Error in chat: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/transcribe")
+async def transcribe_audio(file: bytes = Body(...), user_id: str = "unknown"):
+    """
+    Transcribe audio file using Whisper API
+    Accepts audio file bytes in request body and returns text transcription
+    """
+    try:
+        from io import BytesIO
+
+        # Create file-like object from bytes
+        audio_file = BytesIO(file)
+        audio_file.name = "audio.ogg"  # Telegram voice messages are OGG
+
+        # Call Whisper API
+        transcription = openai_client.audio.transcriptions.create(
+            model=OPENAI_WHISPER_MODEL,
+            file=audio_file,
+            language="ru"  # Russian language
+        )
+
+        result = {
+            "text": transcription.text
+        }
+
+        # Estimate audio duration (OGG Opus ~20 kbps average)
+        audio_size_bytes = len(file)
+        estimated_duration_seconds = (audio_size_bytes * 8) / (20 * 1024)  # bytes to seconds at 20kbps
+
+        # Track to Mixpanel
+        track_event(user_id, "Voice Transcription", {
+            "model": OPENAI_WHISPER_MODEL,
+            "audio_size_bytes": audio_size_bytes,
+            "audio_seconds": round(estimated_duration_seconds, 2),
+            "transcription_length": len(transcription.text)
+        })
+        increment_user_counter(user_id, "total_voice_messages", 1)
+
+        logger.info(f"Transcribed audio: {transcription.text[:50]}...")
+        return result
+
+    except Exception as e:
+        logger.error(f"Error transcribing audio: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
