@@ -1057,7 +1057,8 @@ async def process_callback(request: ProcessCallbackRequest):
                     "duration_minutes": 120
                 }
             )
-            free_slots = slots_response.json()
+            free_slots_data = slots_response.json()
+            free_slots = free_slots_data.get("slots", [])
 
             # Generate schedule via LLM
             logger.info(f"[{user_id}] Generating schedule for goal {goal_id}")
@@ -1076,6 +1077,17 @@ async def process_callback(request: ProcessCallbackRequest):
                 }
             )
             schedule_plan = schedule_response.json()
+
+            # Handle both list and dict responses
+            if isinstance(schedule_plan, dict):
+                # LLM returned error or reason
+                await update_session_state(user_id, DialogState.IDLE, {})
+                reason = schedule_plan.get("reason", "Не удалось создать расписание")
+                return ProcessMessageResponse(
+                    success=False,
+                    response_type="text",
+                    text=f"К сожалению, {reason}. Попробуй изменить дедлайн или выбрать больше дней. 😔"
+                )
 
             if not schedule_plan or len(schedule_plan) == 0:
                 await update_session_state(user_id, DialogState.IDLE, {})

@@ -5,7 +5,7 @@ SCHEDULE_GOAL_PROMPT_TEMPLATE = Template("""
 
 Шаги цели (всего {{ steps|length }}):
 {% for step in steps %}
-{{ step.order }}. {{ step.title }} (время: {{ step.estimated_hours }}ч)
+ID: {{ step.id }}, Порядок: {{ step.order }}. {{ step.title }} (время: {{ step.estimated_hours }}ч)
 {% endfor %}
 
 Параметры планирования:
@@ -51,10 +51,10 @@ SCHEDULE_GOAL_PROMPT_TEMPLATE = Template("""
    - Если шаг требует 5 часов, а доступно только 2-часовые слоты, раздели на несколько сессий
    - Учитывай, что человеку нужен отдых между сессиями
 
-Верни JSON массив с расписанием:
+Верни JSON массив с расписанием (используй НАСТОЯЩИЕ ID шагов из списка выше, НЕ порядковый номер):
 [
-  {"step_id": 1, "planned_date": "2025-11-15", "planned_time": "10:00"},
-  {"step_id": 2, "planned_date": "2025-11-17", "planned_time": "14:00"},
+  {"step_id": <ID_первого_шага>, "planned_date": "2025-11-15", "planned_time": "10:00"},
+  {"step_id": <ID_второго_шага>, "planned_date": "2025-11-17", "planned_time": "14:00"},
   ...
 ]
 

@@ -203,6 +203,46 @@ async def create_goal(goal: GoalCreate):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/goals/free-slots")
+async def get_free_slots(
+    user_id: str,
+    start_date: str,
+    end_date: str,
+    preferred_times: Optional[str] = None,
+    preferred_days: Optional[str] = None,
+    duration_minutes: Optional[int] = 120
+):
+    """Get free time slots in user's calendar"""
+    try:
+        db = get_db()
+
+        # Build time preferences dict
+        time_prefs = {
+            "duration_minutes": duration_minutes
+        }
+
+        if preferred_times:
+            time_prefs["preferred_times"] = preferred_times.split(",")
+
+        if preferred_days:
+            time_prefs["preferred_days"] = preferred_days.split(",")
+
+        with db.session_ctx() as session:
+            slots = goals_service.get_free_time_slots(
+                session=session,
+                user_id=user_id,
+                start_date=start_date,
+                end_date=end_date,
+                time_preferences=time_prefs if (preferred_times or preferred_days) else None
+            )
+
+        logger.info(f"Found {len(slots)} free slots for user {user_id}")
+        return {"slots": slots, "count": len(slots)}
+    except Exception as e:
+        logger.error(f"Error getting free slots: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/goals/{goal_id}", response_model=GoalResponse)
 async def get_goal(goal_id: int, user_id: str):
     """Get a goal by ID with its steps"""
@@ -452,46 +492,6 @@ class TimePreferences(BaseModel):
     preferred_times: Optional[List[str]] = None  # ["morning", "afternoon", "evening"]
     preferred_days: Optional[List[str]] = None   # ["mon", "tue", "wed", ...]
     duration_minutes: Optional[int] = 120
-
-
-@app.get("/api/goals/free-slots")
-async def get_free_slots(
-    user_id: str,
-    start_date: str,
-    end_date: str,
-    preferred_times: Optional[str] = None,
-    preferred_days: Optional[str] = None,
-    duration_minutes: Optional[int] = 120
-):
-    """Get free time slots in user's calendar"""
-    try:
-        db = get_db()
-
-        # Build time preferences dict
-        time_prefs = {
-            "duration_minutes": duration_minutes
-        }
-
-        if preferred_times:
-            time_prefs["preferred_times"] = preferred_times.split(",")
-
-        if preferred_days:
-            time_prefs["preferred_days"] = preferred_days.split(",")
-
-        with db.session_ctx() as session:
-            slots = goals_service.get_free_time_slots(
-                session=session,
-                user_id=user_id,
-                start_date=start_date,
-                end_date=end_date,
-                time_preferences=time_prefs if (preferred_times or preferred_days) else None
-            )
-
-        logger.info(f"Found {len(slots)} free slots for user {user_id}")
-        return {"slots": slots, "count": len(slots)}
-    except Exception as e:
-        logger.error(f"Error getting free slots: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 class FeasibilityRequest(BaseModel):

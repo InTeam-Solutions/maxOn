@@ -345,10 +345,11 @@ async def generate_schedule(request: GenerateScheduleRequest):
     try:
         user_id = "unknown"
 
-        # Check cache
+        # Check cache (include step IDs to ensure uniqueness across different goals)
+        step_ids = ",".join(str(s.get("id", s.get("order", 0))) for s in request.steps)
         cache_key = get_cache_key(
             "schedule",
-            f"{request.goal_title}:{request.start_date}:{request.deadline}:{len(request.steps)}"
+            f"{request.goal_title}:{request.start_date}:{request.deadline}:{step_ids}"
         )
         cached = get_from_cache(cache_key)
         if cached:
