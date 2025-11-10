@@ -9,6 +9,9 @@ class EventBase(BaseModel):
     time: Optional[time_type] = None
     repeat: Optional[str] = None
     notes: Optional[str] = None
+    event_type: Optional[str] = "user"  # "user" | "goal_step"
+    linked_step_id: Optional[int] = None
+    linked_goal_id: Optional[int] = None
 
 
 class EventCreate(EventBase):
@@ -21,6 +24,9 @@ class EventUpdate(BaseModel):
     time: Optional[time_type] = None
     repeat: Optional[str] = None
     notes: Optional[str] = None
+    event_type: Optional[str] = None
+    linked_step_id: Optional[int] = None
+    linked_goal_id: Optional[int] = None
 
 
 class EventResponse(EventBase):

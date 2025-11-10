@@ -71,7 +71,10 @@ async def create_event(event: EventCreate):
                 date=event.date.isoformat(),
                 time=event.time.isoformat(timespec="minutes") if event.time else None,
                 repeat=event.repeat,
-                notes=event.notes
+                notes=event.notes,
+                event_type=event.event_type,
+                linked_step_id=event.linked_step_id,
+                linked_goal_id=event.linked_goal_id
             )
         logger.info(f"Created event {result['id']} for user {event.user_id}")
         return result
