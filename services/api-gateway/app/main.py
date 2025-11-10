@@ -669,6 +669,80 @@ async def callback_toggle_step(callback: CallbackQuery):
         await callback.answer("Произошла ошибка", show_alert=True)
 
 
+# ==================== SCHEDULING CALLBACK HANDLERS ====================
+
+@dp.callback_query(F.data.startswith(("schedule_", "time_pref", "day_pref")))
+async def callback_scheduling(callback: CallbackQuery):
+    """Handle all scheduling-related callbacks"""
+    user_id = str(callback.from_user.id)
+    callback_data = callback.data
+
+    try:
+        logger.info(f"[{user_id}] Scheduling callback: {callback_data}")
+
+        # Send callback to Orchestrator
+        response = await http_client.post(
+            f"{ORCHESTRATOR_URL}/api/callback",
+            json={
+                "user_id": user_id,
+                "callback_data": callback_data
+            },
+            timeout=30.0
+        )
+
+        if response.status_code != 200:
+            logger.error(f"Orchestrator callback error: {response.status_code}")
+            await callback.answer("Произошла ошибка", show_alert=True)
+            return
+
+        result = response.json()
+        response_type = result.get("response_type", "text")
+        text = result.get("text", "")
+        buttons_data = result.get("buttons", [])
+
+        # Build inline keyboard if buttons provided
+        keyboard = None
+        if buttons_data:
+            # Split buttons into rows (2 per row for most, except days which are 3 per row)
+            is_days = "day_pref" in callback_data
+            row_size = 3 if is_days and len(buttons_data) > 4 else 2
+
+            button_rows = []
+            current_row = []
+
+            for btn in buttons_data:
+                current_row.append(
+                    InlineKeyboardButton(
+                        text=btn["text"],
+                        callback_data=btn["callback"]
+                    )
+                )
+
+                if len(current_row) >= row_size:
+                    button_rows.append(current_row)
+                    current_row = []
+
+            if current_row:
+                button_rows.append(current_row)
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=button_rows)
+
+        # Update message or send new one
+        if response_type == "inline_buttons" and keyboard:
+            await callback.message.edit_text(text, parse_mode="HTML", reply_markup=keyboard)
+            await callback.answer()
+        elif text:
+            # For non-button responses, edit message and show notification
+            await callback.message.edit_text(text, parse_mode="HTML")
+            await callback.answer()
+        else:
+            await callback.answer("OK")
+
+    except Exception as e:
+        logger.exception(f"[{user_id}] Error handling scheduling callback")
+        await callback.answer("Произошла ошибка", show_alert=True)
+
+
 @dp.message(F.voice)
 async def handle_voice(message: types.Message):
     """Handle voice messages - transcribe and process"""
@@ -877,7 +951,27 @@ async def handle_message(message: types.Message):
         response_type = result.get("response_type", "text")
         text = result.get("text")
 
-        if response_type == "table":
+        if response_type == "inline_buttons":
+            # Handle inline buttons response from Orchestrator
+            buttons_data = result.get("buttons", [])
+            if buttons_data:
+                # Build inline keyboard
+                button_rows = []
+                for btn in buttons_data:
+                    button_rows.append([
+                        InlineKeyboardButton(
+                            text=btn["text"],
+                            callback_data=btn["callback"]
+                        )
+                    ])
+
+                keyboard = InlineKeyboardMarkup(inline_keyboard=button_rows)
+                await message.answer(text, parse_mode="HTML", reply_markup=keyboard)
+            else:
+                # No buttons, just send text
+                await message.answer(text, parse_mode="HTML")
+
+        elif response_type == "table":
             items = result.get("items", [])
             if items:
                 # Determine item type and render accordingly

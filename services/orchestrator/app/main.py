@@ -69,10 +69,11 @@ class ProcessMessageRequest(BaseModel):
 
 class ProcessMessageResponse(BaseModel):
     success: bool
-    response_type: str  # 'text' | 'table' | 'clarification'
+    response_type: str  # 'text' | 'table' | 'clarification' | 'inline_buttons'
     text: Optional[str] = None
     items: Optional[list] = None
     set_id: Optional[str] = None
+    buttons: Optional[list] = None  # For inline buttons: [{"text": "...", "callback": "..."}]
     error: Optional[str] = None
 
 
@@ -556,6 +557,122 @@ async def update_session_state(user_id: str, state: str, context: Dict[str, Any]
 
 # ==================== MAIN ENDPOINT ====================
 
+async def handle_scheduling_flow(user_id: str, message: str, current_state: str, session_context: Dict[str, Any]) -> Optional[ProcessMessageResponse]:
+    """
+    Handle scheduling flow states
+    Returns ProcessMessageResponse if handled, None otherwise
+    """
+    from datetime import datetime, timedelta
+    import re
+
+    # GOAL_DEADLINE_REQUEST - User needs to provide deadline
+    if current_state == DialogState.GOAL_DEADLINE_REQUEST:
+        # Parse deadline from message
+        deadline = None
+        try:
+            # Try to parse date from message
+            # Simple patterns: "через N дней/недель/месяцев", "15 декабря", "2025-12-15"
+            message_lower = message.lower()
+
+            if "через" in message_lower:
+                if "день" in message_lower or "дня" in message_lower or "дней" in message_lower:
+                    days = int(re.search(r'\d+', message).group())
+                    deadline = (datetime.now() + timedelta(days=days)).date().isoformat()
+                elif "недел" in message_lower:
+                    weeks = int(re.search(r'\d+', message).group())
+                    deadline = (datetime.now() + timedelta(weeks=weeks)).date().isoformat()
+                elif "месяц" in message_lower:
+                    months = int(re.search(r'\d+', message).group())
+                    deadline = (datetime.now() + timedelta(days=months*30)).date().isoformat()
+            else:
+                # Try to parse absolute date
+                from dateutil import parser as dtparser
+                parsed_date = dtparser.parse(message, fuzzy=True)
+                deadline = parsed_date.date().isoformat()
+        except:
+            logger.warning(f"[{user_id}] Could not parse deadline from: {message}")
+
+        if not deadline:
+            return ProcessMessageResponse(
+                success=True,
+                response_type="clarification",
+                text="Не могу понять дату. Попробуй указать конкретнее, например: 'через 2 недели', '15 декабря' или '2025-12-15'"
+            )
+
+        goal_id = session_context.get("goal_id")
+        if not goal_id:
+            logger.error(f"[{user_id}] No goal_id in session context")
+            await update_session_state(user_id, DialogState.IDLE, {})
+            return ProcessMessageResponse(
+                success=False,
+                response_type="text",
+                text="Произошла ошибка. Давай начнём заново."
+            )
+
+        # Check feasibility
+        try:
+            feasibility_response = http_client.post(
+                f"{CORE_SERVICE_URL}/api/goals/{goal_id}/check-feasibility",
+                json={
+                    "user_id": user_id,
+                    "deadline": deadline
+                }
+            )
+            feasibility = feasibility_response.json()
+
+            # Update session context with deadline and feasibility
+            new_context = {
+                **session_context,
+                "deadline": deadline,
+                "feasibility": feasibility
+            }
+
+            # Transition to GOAL_SCHEDULE_OFFER
+            await update_session_state(user_id, DialogState.GOAL_SCHEDULE_OFFER, new_context)
+
+            if feasibility.get("feasible"):
+                text = f"Отлично! Дедлайн: {deadline}\n\n"
+                text += "Хочешь, чтобы я запланировал эти шаги в твоём календаре? Я учту твои занятые слоты и распределю задачи равномерно. 📅"
+                return ProcessMessageResponse(
+                    success=True,
+                    response_type="inline_buttons",
+                    text=text,
+                    buttons=[
+                        {"text": "✅ Да, запланировать", "callback": f"schedule_accept:{goal_id}"},
+                        {"text": "❌ Нет, сам разберусь", "callback": f"schedule_decline:{goal_id}"}
+                    ]
+                )
+            else:
+                required = feasibility.get("required_hours", 0)
+                available = feasibility.get("available_hours", 0)
+                suggested = feasibility.get("suggested_deadline")
+                text = f"⚠️ К сожалению, до {deadline} может не хватить времени.\n\n"
+                text += f"Для цели нужно: {required:.1f}ч\n"
+                text += f"Доступно в календаре: {available:.1f}ч\n\n"
+                if suggested:
+                    text += f"Рекомендую перенести дедлайн на {suggested}.\n\n"
+                text += "Всё равно попробовать запланировать?"
+                return ProcessMessageResponse(
+                    success=True,
+                    response_type="inline_buttons",
+                    text=text,
+                    buttons=[
+                        {"text": "✅ Да, попробуем", "callback": f"schedule_accept:{goal_id}"},
+                        {"text": "❌ Нет, спасибо", "callback": f"schedule_decline:{goal_id}"}
+                    ]
+                )
+        except Exception as e:
+            logger.exception(f"[{user_id}] Error checking feasibility")
+            await update_session_state(user_id, DialogState.IDLE, {})
+            return ProcessMessageResponse(
+                success=False,
+                response_type="text",
+                text="Произошла ошибка при проверке расписания. Попробуем позже?"
+            )
+
+    return None
+
+
 @app.post("/api/process", response_model=ProcessMessageResponse)
 async def process_message(request: ProcessMessageRequest):
     """
@@ -580,6 +697,13 @@ async def process_message(request: ProcessMessageRequest):
         session_context = context["session_state"]["context"]
 
         logger.info(f"[{user_id}] Current state: {current_state}")
+
+        # Handle scheduling flow states first
+        scheduling_response = await handle_scheduling_flow(user_id, message, current_state, session_context)
+        if scheduling_response:
+            await update_conversation(user_id, "user", message)
+            await update_conversation(user_id, "assistant", scheduling_response.text)
+            return scheduling_response
 
         # Step 2: Parse message
         parsed = await parse_message(message, context)
@@ -624,7 +748,44 @@ async def process_message(request: ProcessMessageRequest):
         # Step 5: Check state transitions
         new_state = StateMachine.should_transition(current_state, intent, {**session_context, **params})
 
-        if new_state:
+        # Special handling for goal.create - transition to deadline request
+        if intent == "goal.create" and isinstance(core_result, dict) and core_result.get("id"):
+            logger.info(f"[{user_id}] Goal created, transitioning to deadline request")
+            new_state = DialogState.GOAL_DEADLINE_REQUEST
+            new_context = {
+                "goal_id": core_result["id"],
+                "goal_title": core_result.get("title", "")
+            }
+            await update_session_state(user_id, new_state, new_context)
+
+            # Return special response asking for deadline
+            await update_conversation(user_id, "user", message)
+
+            # Build goal summary text
+            goal_text = f"🎯 Отлично! Я создал цель: *{core_result.get('title')}*\n\n"
+            steps = core_result.get("steps", [])
+            if steps:
+                goal_text += f"📋 Создано {len(steps)} шагов:\n"
+                for i, step in enumerate(steps[:3], 1):
+                    goal_text += f"{i}. {step['title']}\n"
+                if len(steps) > 3:
+                    goal_text += f"... и ещё {len(steps) - 3}\n"
+                goal_text += "\n"
+
+            goal_text += "📅 *Когда ты хочешь достичь этой цели?*\n"
+            goal_text += "Укажи дедлайн, например:\n"
+            goal_text += "• 'через 2 недели'\n"
+            goal_text += "• '15 декабря'\n"
+            goal_text += "• '2025-12-15'"
+
+            await update_conversation(user_id, "assistant", goal_text)
+
+            return ProcessMessageResponse(
+                success=True,
+                response_type="text",
+                text=goal_text
+            )
+        elif new_state:
             logger.info(f"[{user_id}] State transition: {current_state} -> {new_state}")
             await update_session_state(user_id, new_state, {**session_context, **params})
         elif current_state != DialogState.IDLE:
@@ -671,6 +832,362 @@ async def process_message(request: ProcessMessageRequest):
 
     except Exception as e:
         logger.exception(f"[{user_id}] Error processing message")
+        return ProcessMessageResponse(
+            success=False,
+            response_type="text",
+            text="Упс, произошла ошибка. Попробуй ещё раз.",
+            error=str(e)
+        )
+
+
+# ==================== CALLBACK ENDPOINT ====================
+
+class ProcessCallbackRequest(BaseModel):
+    user_id: str
+    callback_data: str
+
+
+@app.post("/api/callback", response_model=ProcessMessageResponse)
+async def process_callback(request: ProcessCallbackRequest):
+    """
+    Handle inline button callbacks from Telegram
+    Format: action:param1:param2
+    """
+    user_id = request.user_id
+    callback_data = request.callback_data
+
+    try:
+        logger.info(f"[{user_id}] Processing callback: {callback_data}")
+        parts = callback_data.split(":")
+        action = parts[0]
+
+        context = await get_user_context(user_id)
+        current_state = context["session_state"]["current_state"]
+        session_context = context["session_state"]["context"]
+
+        # Handle schedule_accept
+        if action == "schedule_accept":
+            goal_id = int(parts[1])
+            logger.info(f"[{user_id}] User accepted scheduling for goal {goal_id}")
+
+            # Update session context
+            new_context = {
+                **session_context,
+                "schedule_accepted": True
+            }
+            await update_session_state(user_id, DialogState.GOAL_SCHEDULE_TIME_PREF, new_context)
+
+            text = "⏰ *Когда тебе удобнее работать над целью?*\n(можно выбрать несколько)"
+            buttons = [
+                {"text": "🌅 Утро (9-12)", "callback": f"time_pref:morning:{goal_id}"},
+                {"text": "☀️ День (12-18)", "callback": f"time_pref:afternoon:{goal_id}"},
+                {"text": "🌙 Вечер (18-22)", "callback": f"time_pref:evening:{goal_id}"},
+                {"text": "✅ Готово", "callback": f"time_pref_done:{goal_id}"}
+            ]
+
+            return ProcessMessageResponse(
+                success=True,
+                response_type="inline_buttons",
+                text=text,
+                buttons=buttons
+            )
+
+        # Handle schedule_decline
+        elif action == "schedule_decline":
+            goal_id = int(parts[1])
+            logger.info(f"[{user_id}] User declined scheduling for goal {goal_id}")
+            await update_session_state(user_id, DialogState.IDLE, {})
+
+            return ProcessMessageResponse(
+                success=True,
+                response_type="text",
+                text="Хорошо! Ты можешь планировать шаги вручную. Если передумаешь - просто напиши! 👍"
+            )
+
+        # Handle time_pref selection
+        elif action == "time_pref":
+            time_slot = parts[1]  # morning, afternoon, evening
+            goal_id = int(parts[2])
+
+            # Get current preferences
+            preferred_times = session_context.get("preferred_times", [])
+            if time_slot in preferred_times:
+                preferred_times.remove(time_slot)
+            else:
+                preferred_times.append(time_slot)
+
+            new_context = {
+                **session_context,
+                "preferred_times": preferred_times
+            }
+            await update_session_state(user_id, DialogState.GOAL_SCHEDULE_TIME_PREF, new_context)
+
+            # Show updated selection
+            time_names = {
+                "morning": "🌅 Утро",
+                "afternoon": "☀️ День",
+                "evening": "🌙 Вечер"
+            }
+            selected = ", ".join([time_names[t] for t in preferred_times]) if preferred_times else "не выбрано"
+            text = f"⏰ *Когда тебе удобнее работать над целью?*\n(можно выбрать несколько)\n\nВыбрано: {selected}"
+
+            buttons = [
+                {"text": f"{'✅ ' if 'morning' in preferred_times else ''}🌅 Утро (9-12)", "callback": f"time_pref:morning:{goal_id}"},
+                {"text": f"{'✅ ' if 'afternoon' in preferred_times else ''}☀️ День (12-18)", "callback": f"time_pref:afternoon:{goal_id}"},
+                {"text": f"{'✅ ' if 'evening' in preferred_times else ''}🌙 Вечер (18-22)", "callback": f"time_pref:evening:{goal_id}"},
+                {"text": "➡️ Далее", "callback": f"time_pref_done:{goal_id}"}
+            ]
+
+            return ProcessMessageResponse(
+                success=True,
+                response_type="inline_buttons",
+                text=text,
+                buttons=buttons
+            )
+
+        # Handle time_pref_done
+        elif action == "time_pref_done":
+            goal_id = int(parts[1])
+            preferred_times = session_context.get("preferred_times", [])
+
+            if not preferred_times:
+                return ProcessMessageResponse(
+                    success=True,
+                    response_type="text",
+                    text="Выбери хотя бы один временной слот! ⏰"
+                )
+
+            # Transition to days selection
+            await update_session_state(user_id, DialogState.GOAL_SCHEDULE_DAYS_PREF, session_context)
+
+            text = "📅 *В какие дни недели тебе удобно?*\n(можно выбрать несколько)"
+            buttons = [
+                {"text": "Пн", "callback": f"day_pref:mon:{goal_id}"},
+                {"text": "Вт", "callback": f"day_pref:tue:{goal_id}"},
+                {"text": "Ср", "callback": f"day_pref:wed:{goal_id}"},
+                {"text": "Чт", "callback": f"day_pref:thu:{goal_id}"},
+                {"text": "Пт", "callback": f"day_pref:fri:{goal_id}"},
+                {"text": "Сб", "callback": f"day_pref:sat:{goal_id}"},
+                {"text": "Вс", "callback": f"day_pref:sun:{goal_id}"},
+                {"text": "✅ Готово", "callback": f"day_pref_done:{goal_id}"}
+            ]
+
+            return ProcessMessageResponse(
+                success=True,
+                response_type="inline_buttons",
+                text=text,
+                buttons=buttons
+            )
+
+        # Handle day_pref selection
+        elif action == "day_pref":
+            day = parts[1]
+            goal_id = int(parts[2])
+
+            # Get current preferences
+            preferred_days = session_context.get("preferred_days", [])
+            if day in preferred_days:
+                preferred_days.remove(day)
+            else:
+                preferred_days.append(day)
+
+            new_context = {
+                **session_context,
+                "preferred_days": preferred_days
+            }
+            await update_session_state(user_id, DialogState.GOAL_SCHEDULE_DAYS_PREF, new_context)
+
+            # Show updated selection
+            selected = ", ".join(preferred_days) if preferred_days else "не выбрано"
+            text = f"📅 *В какие дни недели тебе удобно?*\n(можно выбрать несколько)\n\nВыбрано: {selected}"
+
+            day_buttons = []
+            for d in ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]:
+                label = {"mon": "Пн", "tue": "Вт", "wed": "Ср", "thu": "Чт", "fri": "Пт", "sat": "Сб", "sun": "Вс"}[d]
+                if d in preferred_days:
+                    label = f"✅ {label}"
+                day_buttons.append({"text": label, "callback": f"day_pref:{d}:{goal_id}"})
+
+            day_buttons.append({"text": "➡️ Далее", "callback": f"day_pref_done:{goal_id}"})
+
+            return ProcessMessageResponse(
+                success=True,
+                response_type="inline_buttons",
+                text=text,
+                buttons=day_buttons
+            )
+
+        # Handle day_pref_done - generate schedule
+        elif action == "day_pref_done":
+            goal_id = int(parts[1])
+            preferred_days = session_context.get("preferred_days", [])
+
+            if not preferred_days:
+                return ProcessMessageResponse(
+                    success=True,
+                    response_type="text",
+                    text="Выбери хотя бы один день недели! 📅"
+                )
+
+            # Fetch goal data
+            goal_response = http_client.get(f"{CORE_SERVICE_URL}/api/goals/{goal_id}", params={"user_id": user_id})
+            goal = goal_response.json()
+
+            # Fetch existing events
+            from datetime import datetime
+            deadline = session_context.get("deadline")
+            today = datetime.now().date().isoformat()
+
+            events_response = http_client.get(
+                f"{CORE_SERVICE_URL}/api/events",
+                params={"user_id": user_id, "start_date": today, "end_date": deadline}
+            )
+            existing_events = events_response.json()
+
+            # Get free slots
+            time_prefs = session_context.get("preferred_times", [])
+            slots_response = http_client.get(
+                f"{CORE_SERVICE_URL}/api/goals/free-slots",
+                params={
+                    "user_id": user_id,
+                    "start_date": today,
+                    "end_date": deadline,
+                    "preferred_times": ",".join(time_prefs),
+                    "preferred_days": ",".join(preferred_days),
+                    "duration_minutes": 120
+                }
+            )
+            free_slots = slots_response.json()
+
+            # Generate schedule via LLM
+            logger.info(f"[{user_id}] Generating schedule for goal {goal_id}")
+            schedule_response = http_client.post(
+                f"{LLM_SERVICE_URL}/api/generate-schedule",
+                json={
+                    "goal_title": goal["title"],
+                    "steps": goal["steps"],
+                    "start_date": today,
+                    "deadline": deadline,
+                    "preferred_times": time_prefs,
+                    "preferred_days": preferred_days,
+                    "duration_minutes": 120,
+                    "existing_events": existing_events,
+                    "free_slots": free_slots
+                }
+            )
+            schedule_plan = schedule_response.json()
+
+            if not schedule_plan or len(schedule_plan) == 0:
+                await update_session_state(user_id, DialogState.IDLE, {})
+                return ProcessMessageResponse(
+                    success=False,
+                    response_type="text",
+                    text="К сожалению, не удалось создать расписание с заданными параметрами. Попробуй изменить дедлайн или выбрать больше дней. 😔"
+                )
+
+            # Save schedule plan to session
+            new_context = {
+                **session_context,
+                "schedule_plan": schedule_plan
+            }
+            await update_session_state(user_id, DialogState.GOAL_SCHEDULE_CONFIRM, new_context)
+
+            # Format schedule preview
+            text = "📋 *Вот твоё расписание:*\n\n"
+            for item in schedule_plan[:10]:
+                step_id = item["step_id"]
+                step = next((s for s in goal["steps"] if s["id"] == step_id), None)
+                if step:
+                    date = item["planned_date"]
+                    time = item["planned_time"]
+                    text += f"📅 {date} в {time}\n   {step['title']}\n\n"
+
+            if len(schedule_plan) > 10:
+                text += f"... и ещё {len(schedule_plan) - 10} событий\n\n"
+
+            text += "Добавить в календарь?"
+
+            return ProcessMessageResponse(
+                success=True,
+                response_type="inline_buttons",
+                text=text,
+                buttons=[
+                    {"text": "✅ Да, добавить", "callback": f"schedule_confirm:{goal_id}"},
+                    {"text": "❌ Отменить", "callback": f"schedule_cancel:{goal_id}"}
+                ]
+            )
+
+        # Handle schedule_confirm - actually create events
+        elif action == "schedule_confirm":
+            goal_id = int(parts[1])
+            schedule_plan = session_context.get("schedule_plan", [])
+
+            if not schedule_plan:
+                return ProcessMessageResponse(
+                    success=False,
+                    response_type="text",
+                    text="Расписание не найдено. Попробуй ещё раз."
+                )
+
+            # Create events via Core Service
+            logger.info(f"[{user_id}] Creating {len(schedule_plan)} scheduled events for goal {goal_id}")
+            create_response = http_client.post(
+                f"{CORE_SERVICE_URL}/api/goals/{goal_id}/schedule",
+                json={
+                    "user_id": user_id,
+                    "schedule_plan": schedule_plan,
+                    "create_calendar_events": True
+                }
+            )
+
+            if create_response.status_code != 200:
+                await update_session_state(user_id, DialogState.IDLE, {})
+                return ProcessMessageResponse(
+                    success=False,
+                    response_type="text",
+                    text="Произошла ошибка при создании событий. Попробуй позже."
+                )
+
+            result = create_response.json()
+            created_events = result.get("created_events", [])
+
+            await update_session_state(user_id, DialogState.IDLE, {})
+
+            text = f"✅ Отлично! Я добавил {len(created_events)} событий в твой календарь.\n\n"
+            text += "Буду напоминать о них! Удачи в достижении цели! 🎯🚀"
+
+            track_event(user_id, "Goal Scheduled", {
+                "goal_id": goal_id,
+                "events_created": len(created_events)
+            })
+
+            return ProcessMessageResponse(
+                success=True,
+                response_type="text",
+                text=text
+            )
+
+        # Handle schedule_cancel
+        elif action == "schedule_cancel":
+            goal_id = int(parts[1])
+            await update_session_state(user_id, DialogState.IDLE, {})
+
+            return ProcessMessageResponse(
+                success=True,
+                response_type="text",
+                text="Хорошо, отменил планирование. Если передумаешь - дай знать! 👍"
+            )
+
+        else:
+            logger.warning(f"[{user_id}] Unknown callback action: {action}")
+            return ProcessMessageResponse(
+                success=False,
+                response_type="text",
+                text="Неизвестная команда. Попробуй ещё раз."
+            )
+
+    except Exception as e:
+        logger.exception(f"[{user_id}] Error processing callback")
         return ProcessMessageResponse(
             success=False,
             response_type="text",

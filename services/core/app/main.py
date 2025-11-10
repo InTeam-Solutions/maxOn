@@ -401,6 +401,129 @@ async def delete_step(step_id: int, user_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ==================== GOAL SCHEDULING ====================
+
+
+class SchedulePlanItem(BaseModel):
+    step_id: int
+    planned_date: str
+    planned_time: Optional[str] = None
+
+
+class ScheduleRequest(BaseModel):
+    user_id: str
+    schedule_plan: List[SchedulePlanItem]
+    create_calendar_events: bool = True
+
+
+@app.post("/api/goals/{goal_id}/schedule")
+async def schedule_goal_steps(goal_id: int, request: ScheduleRequest):
+    """Schedule steps in a goal with specific dates/times and create calendar events"""
+    try:
+        db = get_db()
+        with db.session_ctx() as session:
+            # Convert Pydantic models to dicts
+            schedule_plan = [item.dict() for item in request.schedule_plan]
+
+            result = goals_service.schedule_steps(
+                session=session,
+                goal_id=goal_id,
+                user_id=request.user_id,
+                schedule_plan=schedule_plan,
+                create_calendar_events=request.create_calendar_events
+            )
+
+        if "error" in result:
+            raise HTTPException(status_code=404, detail=result["error"])
+
+        logger.info(f"Scheduled {len(request.schedule_plan)} steps for goal {goal_id}")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error scheduling goal steps: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class TimePreferences(BaseModel):
+    preferred_times: Optional[List[str]] = None  # ["morning", "afternoon", "evening"]
+    preferred_days: Optional[List[str]] = None   # ["mon", "tue", "wed", ...]
+    duration_minutes: Optional[int] = 120
+
+
+@app.get("/api/goals/free-slots")
+async def get_free_slots(
+    user_id: str,
+    start_date: str,
+    end_date: str,
+    preferred_times: Optional[str] = None,
+    preferred_days: Optional[str] = None,
+    duration_minutes: Optional[int] = 120
+):
+    """Get free time slots in user's calendar"""
+    try:
+        db = get_db()
+
+        # Build time preferences dict
+        time_prefs = {
+            "duration_minutes": duration_minutes
+        }
+
+        if preferred_times:
+            time_prefs["preferred_times"] = preferred_times.split(",")
+
+        if preferred_days:
+            time_prefs["preferred_days"] = preferred_days.split(",")
+
+        with db.session_ctx() as session:
+            slots = goals_service.get_free_time_slots(
+                session=session,
+                user_id=user_id,
+                start_date=start_date,
+                end_date=end_date,
+                time_preferences=time_prefs if (preferred_times or preferred_days) else None
+            )
+
+        logger.info(f"Found {len(slots)} free slots for user {user_id}")
+        return {"slots": slots, "count": len(slots)}
+    except Exception as e:
+        logger.error(f"Error getting free slots: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class FeasibilityRequest(BaseModel):
+    user_id: str
+    deadline: str
+    time_preferences: Optional[TimePreferences] = None
+
+
+@app.post("/api/goals/{goal_id}/check-feasibility")
+async def check_feasibility(goal_id: int, request: FeasibilityRequest):
+    """Check if it's feasible to complete goal by deadline"""
+    try:
+        db = get_db()
+
+        # Convert TimePreferences to dict
+        time_prefs = None
+        if request.time_preferences:
+            time_prefs = request.time_preferences.dict(exclude_none=True)
+
+        with db.session_ctx() as session:
+            result = goals_service.check_scheduling_feasibility(
+                session=session,
+                user_id=request.user_id,
+                goal_id=goal_id,
+                deadline=request.deadline,
+                time_preferences=time_prefs
+            )
+
+        logger.info(f"Feasibility check for goal {goal_id}: {result['feasible']}")
+        return result
+    except Exception as e:
+        logger.error(f"Error checking feasibility: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== PRODUCTS & CART ====================
 
 @app.post("/api/products", response_model=ProductResponse, status_code=201)

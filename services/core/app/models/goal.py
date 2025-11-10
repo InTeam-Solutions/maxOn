@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Date, Float, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Text, Date, Time, Float, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from shared.database import Base
@@ -14,6 +14,8 @@ class Goal(Base):
     status = Column(String(32), nullable=False, default="active")  # active | completed | archived
     progress_percent = Column(Float, default=0.0)
     target_date = Column(Date, nullable=True)
+    target_deadline = Column(Date, nullable=True)  # User-specified deadline for goal completion
+    is_scheduled = Column(Boolean, default=False)  # Whether steps are scheduled in calendar
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -29,6 +31,8 @@ class Goal(Base):
             "status": self.status,
             "progress_percent": self.progress_percent,
             "target_date": self.target_date.isoformat() if self.target_date else None,
+            "target_deadline": self.target_deadline.isoformat() if self.target_deadline else None,
+            "is_scheduled": self.is_scheduled,
             "created_at": self.created_at.isoformat(),
         }
         if include_steps:
@@ -56,6 +60,12 @@ class Step(Base):
     estimated_hours = Column(Float, nullable=True)
     completed_at = Column(Date, nullable=True)
 
+    # Scheduling fields
+    planned_date = Column(Date, nullable=True)  # When this step is scheduled
+    planned_time = Column(Time, nullable=True)  # Time of day for this step
+    duration_minutes = Column(Integer, nullable=True)  # Duration in minutes (derived from estimated_hours)
+    linked_event_id = Column(Integer, ForeignKey("events.id", ondelete="SET NULL"), nullable=True)  # Link to calendar event
+
     # Relationship
     goal = relationship("Goal", back_populates="steps")
 
@@ -68,4 +78,8 @@ class Step(Base):
             "status": self.status,
             "estimated_hours": self.estimated_hours,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "planned_date": self.planned_date.isoformat() if self.planned_date else None,
+            "planned_time": self.planned_time.isoformat() if self.planned_time else None,
+            "duration_minutes": self.duration_minutes,
+            "linked_event_id": self.linked_event_id,
         }

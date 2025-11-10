@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, Time, Text
+from sqlalchemy import Column, Integer, String, Date, Time, Text, ForeignKey
 from shared.database import Base
 
 
@@ -13,6 +13,11 @@ class Event(Base):
     repeat = Column(String(64), nullable=True)
     notes = Column(Text, nullable=True)
 
+    # Links to goals/steps
+    event_type = Column(String(32), default="user")  # "user" | "goal_step"
+    linked_step_id = Column(Integer, ForeignKey("steps.id", ondelete="CASCADE"), nullable=True)
+    linked_goal_id = Column(Integer, ForeignKey("goals.id", ondelete="CASCADE"), nullable=True)
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -22,4 +27,7 @@ class Event(Base):
             "time": self.time.isoformat(timespec="minutes") if self.time else None,
             "repeat": self.repeat,
             "notes": self.notes,
+            "event_type": self.event_type,
+            "linked_step_id": self.linked_step_id,
+            "linked_goal_id": self.linked_goal_id,
         }

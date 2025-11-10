@@ -16,6 +16,7 @@ from shared.utils.analytics import track_event, increment_user_counter
 from app.prompts.system import SYSTEM_PROMPT_TEMPLATE
 from app.prompts.summarizer import SUMMARIZE_PROMPT_TEMPLATE
 from app.prompts.goal_coach import GOAL_STEPS_PROMPT_TEMPLATE
+from app.prompts.goal_scheduler import SCHEDULE_GOAL_PROMPT_TEMPLATE
 
 # Setup
 app = FastAPI(
@@ -100,6 +101,18 @@ class GenerateStepsRequest(BaseModel):
     current_level: Optional[str] = None
     time_commitment: Optional[str] = None
     additional_context: Optional[str] = None
+
+
+class GenerateScheduleRequest(BaseModel):
+    goal_title: str
+    steps: List[Dict[str, Any]]
+    start_date: str
+    deadline: str
+    preferred_times: Optional[List[str]] = None
+    preferred_days: Optional[List[str]] = None
+    duration_minutes: int = 120
+    existing_events: Optional[List[Dict[str, Any]]] = None
+    free_slots: Optional[List[Dict[str, Any]]] = None
 
 
 class ChatRequest(BaseModel):
@@ -321,6 +334,85 @@ async def generate_steps(request: GenerateStepsRequest):
         raise HTTPException(status_code=500, detail="Failed to parse LLM response")
     except Exception as e:
         logger.error(f"Error generating steps: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/generate-schedule")
+async def generate_schedule(request: GenerateScheduleRequest):
+    """
+    Generate optimal schedule for goal steps using LLM
+    """
+    try:
+        user_id = "unknown"
+
+        # Check cache
+        cache_key = get_cache_key(
+            "schedule",
+            f"{request.goal_title}:{request.start_date}:{request.deadline}:{len(request.steps)}"
+        )
+        cached = get_from_cache(cache_key)
+        if cached:
+            logger.info("Cache hit for generate-schedule")
+            return cached
+
+        # Render prompt with all scheduling context
+        prompt = SCHEDULE_GOAL_PROMPT_TEMPLATE.render(
+            goal_title=request.goal_title,
+            steps=request.steps,
+            start_date=request.start_date,
+            deadline=request.deadline,
+            preferred_times=request.preferred_times or [],
+            preferred_days=request.preferred_days or [],
+            duration_minutes=request.duration_minutes,
+            existing_events=request.existing_events or [],
+            free_slots=request.free_slots or []
+        )
+
+        # Call OpenAI
+        response = openai_client.chat.completions.create(
+            model=OPENAI_CHAT_MODEL,
+            messages=[
+                {"role": "system", "content": "Ты — планировщик задач. Создавай оптимальные расписания с учетом всех ограничений."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.2,  # Lower temperature for more deterministic scheduling
+        )
+
+        raw = response.choices[0].message.content.strip()
+
+        # Try to extract JSON if wrapped in markdown
+        if "```json" in raw:
+            raw = raw.split("```json")[1].split("```")[0].strip()
+        elif "```" in raw:
+            raw = raw.split("```")[1].split("```")[0].strip()
+
+        result = json.loads(raw)
+
+        # Track to Mixpanel
+        usage = response.usage
+        track_event(user_id, "LLM Generate Schedule", {
+            "model": OPENAI_CHAT_MODEL,
+            "goal_title": request.goal_title,
+            "steps_count": len(request.steps),
+            "schedule_items": len(result) if isinstance(result, list) else 0,
+            "tokens_input": usage.prompt_tokens,
+            "tokens_output": usage.completion_tokens,
+            "tokens_total": usage.total_tokens,
+            "days_span": (datetime.fromisoformat(request.deadline) - datetime.fromisoformat(request.start_date)).days
+        })
+        increment_user_counter(user_id, "total_schedule_tokens", usage.total_tokens)
+
+        # Cache result
+        set_to_cache(cache_key, result, ttl=1800)  # 30 minutes cache
+
+        logger.info(f"Generated schedule for goal: {request.goal_title}, {len(result) if isinstance(result, list) else 0} scheduled items")
+        return result
+
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error: {e}, raw response: {raw}")
+        raise HTTPException(status_code=500, detail="Failed to parse LLM response")
+    except Exception as e:
+        logger.error(f"Error generating schedule: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
