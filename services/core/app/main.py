@@ -9,11 +9,13 @@ from shared.database import init_db, get_db, Base
 from shared.schemas.events import EventCreate, EventUpdate, EventResponse
 from shared.schemas.goals import GoalCreate, GoalUpdate, GoalResponse, StepBase, StepResponse
 from shared.schemas.products import ProductCreate, ProductResponse, CartItemCreate, CartItemResponse
+from shared.schemas.users import UserCreate, UserUpdate, UserResponse
 from shared.utils.logger import setup_logger
 
 from app.services import events as events_service
 from app.services import goals as goals_service
 from app.services import products as products_service
+from app.services import users as users_service
 
 # Setup
 app = FastAPI(
@@ -647,4 +649,86 @@ async def clear_cart(user_id: str):
         return {"status": "cleared", "count": count}
     except Exception as e:
         logger.error(f"Error clearing cart: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== USERS ====================
+
+@app.post("/api/users", response_model=UserResponse, status_code=201)
+async def create_or_update_user(user: UserCreate):
+    """Create a new user or update existing one"""
+    try:
+        db = get_db()
+        with db.session_ctx() as session:
+            result = users_service.create_or_update_user(
+                session=session,
+                user_id=user.user_id,
+                chat_id=user.chat_id,
+                timezone=user.timezone,
+                notification_enabled=user.notification_enabled,
+                event_reminders_enabled=user.event_reminders_enabled,
+                goal_deadline_warnings_enabled=user.goal_deadline_warnings_enabled,
+                step_reminders_enabled=user.step_reminders_enabled,
+                motivational_messages_enabled=user.motivational_messages_enabled
+            )
+        logger.info(f"Created/updated user {user.user_id}")
+        return result
+    except Exception as e:
+        logger.error(f"Error creating/updating user: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/users/{user_id}", response_model=UserResponse)
+async def get_user(user_id: str):
+    """Get user settings by ID"""
+    try:
+        db = get_db()
+        with db.session_ctx() as session:
+            result = users_service.get_user(session, user_id)
+
+        if not result:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting user: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/api/users/{user_id}", response_model=UserResponse)
+async def update_user_settings(user_id: str, update: UserUpdate):
+    """Update user notification settings"""
+    try:
+        db = get_db()
+        with db.session_ctx() as session:
+            result = users_service.update_user_settings(
+                session=session,
+                user_id=user_id,
+                **update.model_dump(exclude_unset=True)
+            )
+
+        if not result:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        logger.info(f"Updated settings for user {user_id}")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating user settings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/users")
+async def get_all_users_with_notifications():
+    """Get all users with notifications enabled (for worker service)"""
+    try:
+        db = get_db()
+        with db.session_ctx() as session:
+            results = users_service.get_all_users_with_notifications_enabled(session)
+        return results
+    except Exception as e:
+        logger.error(f"Error getting users: {e}")
         raise HTTPException(status_code=500, detail=str(e))

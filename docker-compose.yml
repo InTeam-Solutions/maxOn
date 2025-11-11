@@ -144,6 +144,7 @@ services:
       - .env
     environment:
       - ORCHESTRATOR_URL=http://orchestrator:8001
+      - CORE_SERVICE_URL=http://core:8004
     depends_on:
       orchestrator:
         condition: service_started
@@ -153,30 +154,36 @@ services:
     volumes:
       - ./shared:/app/shared:ro
 
-  # worker:
-  #   build:
-  #     context: .
-  #     dockerfile: services/worker/Dockerfile
-  #   image: ghcr.io/0stg0t/initio-worker:latest
-  #   container_name: initio_worker
-  #   environment:
-  #     - DATABASE_URL=postgresql://${POSTGRES_USER:-initio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-initio}
-  #     - RABBITMQ_URL=amqp://${RABBITMQ_USER:-initio}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-  #     - CORE_SERVICE_URL=http://core:8004
-  #     - REDIS_URL=redis://redis:6379/4
-  #     - LOG_LEVEL=${LOG_LEVEL:-INFO}
-  #   depends_on:
-  #     rabbitmq:
-  #       condition: service_healthy
-  #     postgres:
-  #       condition: service_healthy
-  #     core:
-  #       condition: service_started
-  #   restart: unless-stopped
-  #   networks:
-  #     - initio_network
-  #   volumes:
-  #     - ./shared:/app/shared:ro
+  worker:
+    build:
+      context: .
+      dockerfile: services/worker/Dockerfile
+    image: ghcr.io/0stg0t/initio-worker:latest
+    container_name: initio_worker
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-initio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-initio}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=4
+      - CORE_SERVICE_URL=http://core:8004
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      core:
+        condition: service_started
+    ports:
+      - "8005:8005"
+    restart: unless-stopped
+    networks:
+      - initio_network
+    volumes:
+      - ./shared:/app/shared:ro
 
 volumes:
   postgres_data:

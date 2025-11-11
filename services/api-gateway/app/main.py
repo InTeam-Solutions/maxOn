@@ -328,6 +328,14 @@ async def cmd_events(message: Message):
     await show_events_for_user(message.chat.id, user_id, message.bot)
 
 
+@dp.message(Command("settings"))
+async def cmd_settings(message: Message):
+    """Handle /settings command - show notification settings"""
+    user_id = str(message.from_user.id)
+    chat_id = message.chat.id
+    await show_settings(chat_id, user_id, message.bot)
+
+
 @dp.callback_query(F.data == "show_goals")
 async def callback_show_goals(callback: CallbackQuery):
     """Handle show_goals button"""
@@ -3538,6 +3546,153 @@ async def callback_calendar_cancel(callback: CallbackQuery):
 async def callback_calendar_ignore(callback: CallbackQuery):
     """Ignore non-clickable calendar cells"""
     await callback.answer()
+
+
+# ==================== NOTIFICATION SETTINGS ====================
+
+async def show_settings(chat_id: int, user_id: str, bot_instance):
+    """Show notification settings to user"""
+    try:
+        # Get or create user settings
+        response = await http_client.get(f"{CORE_SERVICE_URL}/api/users/{user_id}")
+
+        if response.status_code == 404:
+            # User doesn't exist yet, create with defaults
+            await http_client.post(
+                f"{CORE_SERVICE_URL}/api/users",
+                json={
+                    "user_id": user_id,
+                    "chat_id": str(chat_id),
+                    "timezone": "Europe/Moscow",
+                    "notification_enabled": True,
+                    "event_reminders_enabled": True,
+                    "goal_deadline_warnings_enabled": True,
+                    "step_reminders_enabled": True,
+                    "motivational_messages_enabled": True
+                }
+            )
+            # Fetch again
+            response = await http_client.get(f"{CORE_SERVICE_URL}/api/users/{user_id}")
+
+        user_settings = response.json()
+
+        # Build settings message
+        global_enabled = user_settings.get("notification_enabled", True)
+        event_enabled = user_settings.get("event_reminders_enabled", True)
+        goal_enabled = user_settings.get("goal_deadline_warnings_enabled", True)
+        step_enabled = user_settings.get("step_reminders_enabled", True)
+        motivational_enabled = user_settings.get("motivational_messages_enabled", True)
+
+        # Emojis for enabled/disabled
+        def status_emoji(enabled):
+            return "✅" if enabled else "❌"
+
+        message = f"""⚙️ <b>Настройки уведомлений</b>
+
+{status_emoji(global_enabled)} Все уведомления: {"включены" if global_enabled else "отключены"}
+
+<b>Типы уведомлений:</b>
+{status_emoji(event_enabled)} Напоминания о событиях
+{status_emoji(goal_enabled)} Предупреждения о дедлайнах
+{status_emoji(step_enabled)} Напоминания о незавершенных шагах
+{status_emoji(motivational_enabled)} Мотивационные сообщения"""
+
+        # Build keyboard
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"{'🔕' if global_enabled else '🔔'} Все уведомления",
+                    callback_data="settings_toggle_global"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{'✅' if event_enabled else '❌'} События",
+                    callback_data="settings_toggle_event_reminders"
+                ),
+                InlineKeyboardButton(
+                    text=f"{'✅' if goal_enabled else '❌'} Дедлайны",
+                    callback_data="settings_toggle_goal_deadlines"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{'✅' if step_enabled else '❌'} Шаги",
+                    callback_data="settings_toggle_step_reminders"
+                ),
+                InlineKeyboardButton(
+                    text=f"{'✅' if motivational_enabled else '❌'} Мотивация",
+                    callback_data="settings_toggle_motivational"
+                )
+            ],
+            [
+                InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")
+            ]
+        ])
+
+        await bot_instance.send_message(
+            chat_id,
+            message,
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+
+    except Exception as e:
+        logger.error(f"Error showing settings: {e}")
+        await bot_instance.send_message(
+            chat_id,
+            "❌ Упс, произошла ошибка при загрузке настроек.",
+            parse_mode="HTML"
+        )
+
+
+@dp.callback_query(F.data.startswith("settings_toggle_"))
+async def callback_settings_toggle(callback: CallbackQuery):
+    """Handle settings toggle buttons"""
+    await callback.answer()
+
+    user_id = str(callback.from_user.id)
+    chat_id = callback.message.chat.id
+
+    # Determine which setting to toggle
+    setting_type = callback.data.replace("settings_toggle_", "")
+
+    setting_map = {
+        "global": "notification_enabled",
+        "event_reminders": "event_reminders_enabled",
+        "goal_deadlines": "goal_deadline_warnings_enabled",
+        "step_reminders": "step_reminders_enabled",
+        "motivational": "motivational_messages_enabled"
+    }
+
+    field_name = setting_map.get(setting_type)
+
+    if not field_name:
+        await callback.answer("❌ Неизвестная настройка")
+        return
+
+    try:
+        # Get current settings
+        response = await http_client.get(f"{CORE_SERVICE_URL}/api/users/{user_id}")
+        user_settings = response.json()
+
+        # Toggle the setting
+        current_value = user_settings.get(field_name, True)
+        new_value = not current_value
+
+        # Update settings
+        await http_client.patch(
+            f"{CORE_SERVICE_URL}/api/users/{user_id}",
+            json={field_name: new_value}
+        )
+
+        # Refresh settings display
+        await callback.message.delete()
+        await show_settings(chat_id, user_id, callback.bot)
+
+    except Exception as e:
+        logger.error(f"Error toggling setting: {e}")
+        await callback.answer("❌ Ошибка при обновлении настроек")
 
 
 async def on_shutdown():
