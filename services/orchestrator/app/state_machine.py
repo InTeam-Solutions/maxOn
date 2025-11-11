@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 class DialogState(str, Enum):
     IDLE = "idle"
     GOAL_CLARIFICATION = "goal_clarification"
+    GOAL_TIME_COMMITMENT = "goal_time_commitment"
     GOAL_STEPS_GENERATION = "goal_steps_generation"
     GOAL_CONFIRM = "goal_confirm"
     GOAL_DEADLINE_REQUEST = "goal_deadline_request"
@@ -107,6 +108,7 @@ class StateMachine:
         expiry_map = {
             DialogState.IDLE: 1,
             DialogState.GOAL_CLARIFICATION: 4,
+            DialogState.GOAL_TIME_COMMITMENT: 4,
             DialogState.GOAL_STEPS_GENERATION: 2,
             DialogState.GOAL_CONFIRM: 2,
             DialogState.GOAL_DEADLINE_REQUEST: 4,
@@ -124,6 +126,7 @@ class StateMachine:
         """Get prompt hint for user based on current state"""
         hints = {
             DialogState.GOAL_CLARIFICATION: "Расскажи больше о цели: твой текущий уровень, сколько времени готов уделять?",
+            DialogState.GOAL_TIME_COMMITMENT: "Укажи, сколько времени в день готов выделять на эту цель",
             DialogState.GOAL_CONFIRM: "Подтверди создание цели или попроси изменить шаги",
             DialogState.GOAL_DEADLINE_REQUEST: "Укажи дедлайн для достижения цели",
             DialogState.GOAL_SCHEDULE_OFFER: "Хочешь запланировать шаги в календаре?",

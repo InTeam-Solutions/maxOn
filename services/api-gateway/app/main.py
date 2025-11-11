@@ -132,6 +132,20 @@ async def cmd_start(message: Message):
     """Handle /start command"""
     user_id = str(message.from_user.id)
 
+    # Reset session state to idle (clear any previous dialog state)
+    try:
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "idle",
+                "context": {},
+                "expiry_hours": 1
+            }
+        )
+        logger.info(f"Reset session state for user {user_id} to idle on /start")
+    except Exception as e:
+        logger.error(f"Error resetting session state: {e}")
+
     # Track user start
     track_event(user_id, "Bot Started", {
         "username": message.from_user.username,
@@ -328,6 +342,23 @@ async def callback_show_events(callback: CallbackQuery):
 async def callback_new_goal(callback: CallbackQuery):
     """Handle new_goal button"""
     await callback.answer()
+
+    user_id = str(callback.from_user.id)
+
+    # Set state to goal_clarification to indicate user wants to create a new goal
+    try:
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "goal_clarification",
+                "context": {},
+                "expiry_hours": 4
+            }
+        )
+        logger.info(f"Set session state for user {user_id} to goal_clarification")
+    except Exception as e:
+        logger.error(f"Error setting session state: {e}")
+
     await callback.message.answer(
         "💡 Отлично! Расскажи мне о своей цели.\n\n"
         "Например:\n"
@@ -342,12 +373,18 @@ async def callback_new_goal(callback: CallbackQuery):
 async def callback_new_event(callback: CallbackQuery):
     """Handle new_event button"""
     await callback.answer()
+
+    user_id = str(callback.from_user.id)
+
+    # Show calendar for date selection
+    from app.renderer import create_calendar_keyboard
+
+    calendar_keyboard = create_calendar_keyboard()
+
     await callback.message.answer(
-        "📅 Создам событие! Скажи мне:\n\n"
-        "Например:\n"
-        "• Созвон с командой завтра в 15:00\n"
-        "• Встреча с клиентом 5 октября\n"
-        "• Тренировка каждый понедельник в 18:00"
+        "📅 <b>Создание события</b>\n\nВыбери дату события:",
+        reply_markup=calendar_keyboard,
+        parse_mode="HTML"
     )
 
 
@@ -1074,6 +1111,126 @@ async def on_startup():
     logger.info("✅ Bot commands menu set")
 
     logger.info("✅ Telegram Bot started successfully")
+
+
+# ==================== CALENDAR HANDLERS ====================
+
+@dp.callback_query(F.data.startswith("cal_prev_"))
+async def callback_calendar_prev(callback: CallbackQuery):
+    """Handle calendar previous month"""
+    await callback.answer()
+
+    from app.renderer import create_calendar_keyboard
+
+    # Parse year and month
+    parts = callback.data.split("_")
+    year = int(parts[2])
+    month = int(parts[3])
+
+    # Go to previous month
+    if month == 1:
+        month = 12
+        year -= 1
+    else:
+        month -= 1
+
+    calendar_keyboard = create_calendar_keyboard(year, month)
+
+    await callback.message.edit_text(
+        "📅 <b>Создание события</b>\n\nВыбери дату события:",
+        reply_markup=calendar_keyboard,
+        parse_mode="HTML"
+    )
+
+
+@dp.callback_query(F.data.startswith("cal_next_"))
+async def callback_calendar_next(callback: CallbackQuery):
+    """Handle calendar next month"""
+    await callback.answer()
+
+    from app.renderer import create_calendar_keyboard
+
+    # Parse year and month
+    parts = callback.data.split("_")
+    year = int(parts[2])
+    month = int(parts[3])
+
+    # Go to next month
+    if month == 12:
+        month = 1
+        year += 1
+    else:
+        month += 1
+
+    calendar_keyboard = create_calendar_keyboard(year, month)
+
+    await callback.message.edit_text(
+        "📅 <b>Создание события</b>\n\nВыбери дату события:",
+        reply_markup=calendar_keyboard,
+        parse_mode="HTML"
+    )
+
+
+@dp.callback_query(F.data.startswith("cal_select_"))
+async def callback_calendar_select(callback: CallbackQuery):
+    """Handle calendar date selection"""
+    await callback.answer()
+
+    # Parse selected date
+    parts = callback.data.split("_")
+    year = parts[2]
+    month = parts[3]
+    day = parts[4]
+    selected_date = f"{year}-{month}-{day}"
+
+    user_id = str(callback.from_user.id)
+
+    # Store selected date in session context
+    try:
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "event_clarification",
+                "context": {"selected_date": selected_date},
+                "expiry_hours": 2
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error storing selected date: {e}")
+
+    # Format date nicely
+    from datetime import datetime
+    date_obj = datetime.fromisoformat(selected_date)
+    weekday = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"][date_obj.weekday()]
+    date_formatted = f"{weekday}, {date_obj.strftime('%d.%m.%Y')}"
+
+    await callback.message.edit_text(
+        f"📅 <b>Создание события</b>\n\n"
+        f"Дата: {date_formatted}\n\n"
+        f"Теперь введи детали события:\n"
+        f"• Название\n"
+        f"• Время (например: 15:00)\n"
+        f"• Длительность (например: 1 час)\n\n"
+        f"Например: <i>Встреча с клиентом в 15:00, 2 часа</i>",
+        parse_mode="HTML"
+    )
+
+
+@dp.callback_query(F.data == "cal_cancel")
+async def callback_calendar_cancel(callback: CallbackQuery):
+    """Handle calendar cancel"""
+    await callback.answer("Отменено")
+
+    await callback.message.edit_text(
+        "❌ Создание события отменено.\n\n"
+        "Используй /start для возврата в главное меню."
+    )
+
+
+@dp.callback_query(F.data == "cal_ignore")
+async def callback_calendar_ignore(callback: CallbackQuery):
+    """Ignore non-clickable calendar cells"""
+    await callback.answer()
 
 
 async def on_shutdown():

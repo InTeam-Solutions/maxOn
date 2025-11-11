@@ -2,6 +2,8 @@
 Formatter for rendering events, goals, and products in Telegram HTML format
 """
 from typing import List, Dict, Any
+from datetime import datetime, timedelta
+import calendar
 
 
 def render_events(events: List[Dict[str, Any]], title: str = "События") -> str:
@@ -14,6 +16,7 @@ def render_events(events: List[Dict[str, Any]], title: str = "События") -
     for idx, event in enumerate(events, 1):
         date = event.get("date", "?")
         time = event.get("time", "")
+        duration_minutes = event.get("duration_minutes")
         event_title = event.get("title", "Без названия")
         repeat = event.get("repeat")
         notes = event.get("notes", "")
@@ -27,12 +30,25 @@ def render_events(events: List[Dict[str, Any]], title: str = "События") -
         except:
             date_formatted = date
 
+        # Format duration
+        duration_str = ""
+        if duration_minutes:
+            if duration_minutes < 60:
+                duration_str = f" ⏱ {duration_minutes} мин"
+            else:
+                hours = duration_minutes // 60
+                mins = duration_minutes % 60
+                if mins > 0:
+                    duration_str = f" ⏱ {hours}ч {mins}мин"
+                else:
+                    duration_str = f" ⏱ {hours}ч"
+
         time_str = f" в <b>{time}</b>" if time else ""
         repeat_str = f" 🔁 <i>{repeat}</i>" if repeat else ""
         notes_str = f"\n      💬 <i>{notes}</i>" if notes else ""
 
         lines.append(f"\n{idx}. <b>{event_title}</b>")
-        lines.append(f"      📆 {date_formatted}{time_str}{repeat_str}{notes_str}")
+        lines.append(f"      📆 {date_formatted}{time_str}{duration_str}{repeat_str}{notes_str}")
 
     return "\n".join(lines)
 
@@ -215,3 +231,97 @@ def render_cart(cart_items: List[Dict[str, Any]], title: str = "Корзина")
     lines.append(f"\n<b>Итого: {total:.2f} ₽</b>")
 
     return "\n".join(lines)
+
+
+def create_calendar_keyboard(year: int = None, month: int = None):
+    """Create inline keyboard with calendar for date selection"""
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+    now = datetime.now()
+    if year is None:
+        year = now.year
+    if month is None:
+        month = now.month
+
+    # Get calendar data
+    cal = calendar.monthcalendar(year, month)
+    month_names = ["", "Янв", "Фев", "Мар", "Апр", "Май", "Июн",
+                   "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"]
+
+    # Create keyboard
+    keyboard = []
+
+    # Header with month and year (compact)
+    keyboard.append([
+        InlineKeyboardButton(text="◀", callback_data=f"cal_prev_{year}_{month}"),
+        InlineKeyboardButton(text=f"{month_names[month]} '{year % 100}", callback_data="cal_ignore"),
+        InlineKeyboardButton(text="▶", callback_data=f"cal_next_{year}_{month}")
+    ])
+
+    # Weekday names (compact single letters)
+    weekdays = ["П", "В", "С", "Ч", "П", "С", "В"]
+    keyboard.append([InlineKeyboardButton(text=day, callback_data="cal_ignore") for day in weekdays])
+
+    # Calendar days - only show weeks with future dates
+    current_date = now.date()
+    for week in cal:
+        # Check if this week has any future dates
+        has_future = False
+        for day in week:
+            if day > 0:
+                date = datetime(year, month, day).date()
+                if date >= current_date:
+                    has_future = True
+                    break
+
+        if not has_future:
+            continue  # Skip past weeks
+
+        row = []
+        for day in week:
+            if day == 0:
+                # Empty cell - use invisible space
+                row.append(InlineKeyboardButton(text="·", callback_data="cal_ignore"))
+            else:
+                date = datetime(year, month, day).date()
+                if date < current_date:
+                    # Past date - show dimmed
+                    row.append(InlineKeyboardButton(text="·", callback_data="cal_ignore"))
+                else:
+                    # Future or today - selectable
+                    callback_data = f"cal_select_{year}_{month:02d}_{day:02d}"
+                    if date == current_date:
+                        text = f"[{day}]"  # Today in brackets
+                    else:
+                        text = str(day)
+                    row.append(InlineKeyboardButton(text=text, callback_data=callback_data))
+        keyboard.append(row)
+
+    # Quick date buttons for common choices
+    today = now.date()
+    tomorrow = today + timedelta(days=1)
+    week_later = today + timedelta(days=7)
+
+    quick_buttons = []
+    if tomorrow.month == month and tomorrow.year == year:
+        quick_buttons.append(
+            InlineKeyboardButton(
+                text="Завтра",
+                callback_data=f"cal_select_{tomorrow.year}_{tomorrow.month:02d}_{tomorrow.day:02d}"
+            )
+        )
+    if week_later.month == month and week_later.year == year:
+        quick_buttons.append(
+            InlineKeyboardButton(
+                text="Через неделю",
+                callback_data=f"cal_select_{week_later.year}_{week_later.month:02d}_{week_later.day:02d}"
+            )
+        )
+
+    if quick_buttons:
+        keyboard.append(quick_buttons)
+
+    # Cancel button
+    keyboard.append([InlineKeyboardButton(text="✕ Отмена", callback_data="cal_cancel")])
+
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)

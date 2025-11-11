@@ -10,6 +10,7 @@ class Event(Base):
     title = Column(String(255), nullable=False)
     date = Column(Date, nullable=False, index=True)
     time = Column(Time, nullable=True)
+    duration_minutes = Column(Integer, nullable=True)  # Duration in minutes
     repeat = Column(String(64), nullable=True)
     notes = Column(Text, nullable=True)
 
@@ -25,6 +26,7 @@ class Event(Base):
             "title": self.title,
             "date": self.date.isoformat(),
             "time": self.time.isoformat(timespec="minutes") if self.time else None,
+            "duration_minutes": self.duration_minutes,
             "repeat": self.repeat,
             "notes": self.notes,
             "event_type": self.event_type,
