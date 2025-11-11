@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker compose:*)",
+      "Bash(printenv)",
+      "Bash(curl:*)",
+      "Bash(python3:*)",
+      "Bash(python test_mixpanel.py)",
+      "Bash(pip install:*)",
+      "Bash(ssh sofiapivtoronis@100.123.26.67:*)",
+      "Bash(open -a Docker)",
+      "Bash(docker volume rm:*)",
+      "Bash(cat:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(zip:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

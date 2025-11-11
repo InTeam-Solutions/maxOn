@@ -1,0 +1,187 @@
+services:
+  # ==================== Databases ====================
+  postgres:
+    image: postgres:16-alpine
+    container_name: initio_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-initio}
+      POSTGRES_USER: ${POSTGRES_USER:-initio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-initio}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - initio_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: initio_redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - initio_network
+
+  # ==================== Application Services ====================
+  core:
+    build:
+      context: .
+      dockerfile: services/core/Dockerfile
+    image: ghcr.io/0stg0t/initio-core:latest
+    container_name: initio_core
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-initio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-initio}
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8004:8004"
+    restart: unless-stopped
+    networks:
+      - initio_network
+    volumes:
+      - ./shared:/app/shared:ro
+
+  context:
+    build:
+      context: .
+      dockerfile: services/context/Dockerfile
+    image: ghcr.io/0stg0t/initio-context:latest
+    container_name: initio_context
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-initio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-initio}
+      - REDIS_URL=redis://redis:6379/1
+      - CORE_SERVICE_URL=http://core:8004
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      core:
+        condition: service_started
+    ports:
+      - "8002:8002"
+    restart: unless-stopped
+    networks:
+      - initio_network
+    volumes:
+      - ./shared:/app/shared:ro
+
+  llm:
+    build:
+      context: .
+      dockerfile: services/llm/Dockerfile
+    image: ghcr.io/0stg0t/initio-llm:latest
+    container_name: initio_llm
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/2
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8003:8003"
+    restart: unless-stopped
+    networks:
+      - initio_network
+    volumes:
+      - ./shared:/app/shared:ro
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: services/orchestrator/Dockerfile
+    image: ghcr.io/0stg0t/initio-orchestrator:latest
+    container_name: initio_orchestrator
+    env_file:
+      - .env
+    environment:
+      - CONTEXT_SERVICE_URL=http://context:8002
+      - LLM_SERVICE_URL=http://llm:8003
+      - CORE_SERVICE_URL=http://core:8004
+      - REDIS_URL=redis://redis:6379/3
+    depends_on:
+      context:
+        condition: service_started
+      llm:
+        condition: service_started
+      core:
+        condition: service_started
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+    networks:
+      - initio_network
+    volumes:
+      - ./shared:/app/shared:ro
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    image: ghcr.io/0stg0t/initio-api-gateway:latest
+    container_name: initio_api_gateway
+    env_file:
+      - .env
+    environment:
+      - ORCHESTRATOR_URL=http://orchestrator:8001
+    depends_on:
+      orchestrator:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - initio_network
+    volumes:
+      - ./shared:/app/shared:ro
+
+  # worker:
+  #   build:
+  #     context: .
+  #     dockerfile: services/worker/Dockerfile
+  #   image: ghcr.io/0stg0t/initio-worker:latest
+  #   container_name: initio_worker
+  #   environment:
+  #     - DATABASE_URL=postgresql://${POSTGRES_USER:-initio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-initio}
+  #     - RABBITMQ_URL=amqp://${RABBITMQ_USER:-initio}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+  #     - CORE_SERVICE_URL=http://core:8004
+  #     - REDIS_URL=redis://redis:6379/4
+  #     - LOG_LEVEL=${LOG_LEVEL:-INFO}
+  #   depends_on:
+  #     rabbitmq:
+  #       condition: service_healthy
+  #     postgres:
+  #       condition: service_healthy
+  #     core:
+  #       condition: service_started
+  #   restart: unless-stopped
+  #   networks:
+  #     - initio_network
+  #   volumes:
+  #     - ./shared:/app/shared:ro
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  initio_network:
+    driver: bridge
