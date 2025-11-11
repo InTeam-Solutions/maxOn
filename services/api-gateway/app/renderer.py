@@ -7,48 +7,74 @@ import calendar
 
 
 def render_events(events: List[Dict[str, Any]], title: str = "События") -> str:
-    """Render list of events as HTML table for Telegram"""
+    """Render list of events grouped by date for Telegram"""
     if not events:
         return f"📅 <b>{title}</b>\n\n<i>Событий не найдено.</i>"
 
+    # Group events by date
+    from collections import defaultdict
+    events_by_date = defaultdict(list)
+
+    for event in events:
+        date = event.get("date", "?")
+        events_by_date[date].append(event)
+
+    # Sort dates
+    sorted_dates = sorted(events_by_date.keys())
+
     lines = [f"📅 <b>{title}</b>\n"]
 
-    for idx, event in enumerate(events, 1):
-        date = event.get("date", "?")
-        time = event.get("time", "")
-        duration_minutes = event.get("duration_minutes")
-        event_title = event.get("title", "Без названия")
-        repeat = event.get("repeat")
-        notes = event.get("notes", "")
-
-        # Format date nicely
+    for date in sorted_dates:
+        # Format date header
         try:
-            from datetime import datetime
             date_obj = datetime.fromisoformat(date)
-            weekday = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"][date_obj.weekday()]
-            date_formatted = f"{weekday}, {date_obj.strftime('%d.%m.%Y')}"
+            weekday_full = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"][date_obj.weekday()]
+            date_short = date_obj.strftime('%d.%m')
+            lines.append(f"\n━━━ <b>{weekday_full}, {date_short}</b> ━━━")
         except:
-            date_formatted = date
+            lines.append(f"\n━━━ <b>{date}</b> ━━━")
 
-        # Format duration
-        duration_str = ""
-        if duration_minutes:
-            if duration_minutes < 60:
-                duration_str = f" ⏱ {duration_minutes} мин"
-            else:
-                hours = duration_minutes // 60
-                mins = duration_minutes % 60
-                if mins > 0:
-                    duration_str = f" ⏱ {hours}ч {mins}мин"
+        # Sort events by time for this date
+        date_events = sorted(events_by_date[date], key=lambda e: e.get("time_start", e.get("time", "00:00")))
+
+        for event in date_events:
+            time_start = event.get("time_start", event.get("time", ""))
+            duration_minutes = event.get("duration_minutes")
+            event_title = event.get("title", "Без названия")
+            notes = event.get("notes", "")
+
+            # Remove seconds from time
+            if time_start and len(time_start) > 5:
+                time_start = time_start[:5]  # Keep only HH:MM
+
+            # Truncate long titles
+            if len(event_title) > 60:
+                event_title = event_title[:57] + "..."
+
+            # Format duration
+            duration_str = ""
+            if duration_minutes:
+                if duration_minutes < 60:
+                    duration_str = f" <i>({duration_minutes}мин)</i>"
                 else:
-                    duration_str = f" ⏱ {hours}ч"
+                    hours = duration_minutes / 60
+                    if hours == int(hours):
+                        duration_str = f" <i>({int(hours)}ч)</i>"
+                    else:
+                        duration_str = f" <i>({hours:.1f}ч)</i>"
 
-        time_str = f" в <b>{time}</b>" if time else ""
-        repeat_str = f" 🔁 <i>{repeat}</i>" if repeat else ""
-        notes_str = f"\n      💬 <i>{notes}</i>" if notes else ""
+            time_str = f"⏰ <b>{time_start}</b>" if time_start else "⏰ <b>--:--</b>"
+            lines.append(f"{time_str}  {event_title}{duration_str}")
 
-        lines.append(f"\n{idx}. <b>{event_title}</b>")
-        lines.append(f"      📆 {date_formatted}{time_str}{duration_str}{repeat_str}{notes_str}")
+            # Only show notes if they're different from title and not too long
+            if notes and notes not in event_title and not notes.startswith("Шаг"):
+                if len(notes) > 50:
+                    lines.append(f"   💬 <i>{notes[:47]}...</i>")
+                else:
+                    lines.append(f"   💬 <i>{notes}</i>")
+
+            # Add spacing between events
+            lines.append("")
 
     return "\n".join(lines)
 

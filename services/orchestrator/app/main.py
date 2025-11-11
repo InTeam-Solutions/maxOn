@@ -610,6 +610,18 @@ async def handle_scheduling_flow(user_id: str, message: str, current_state: str,
                 text="Произошла ошибка. Давай начнём заново."
             )
 
+        # Update goal with deadline in database
+        try:
+            update_response = http_client.patch(
+                f"{CORE_SERVICE_URL}/api/goals/{goal_id}",
+                params={"user_id": user_id},
+                json={"target_date": deadline}
+            )
+            if update_response.status_code != 200:
+                logger.error(f"[{user_id}] Failed to update goal deadline: {update_response.status_code}")
+        except Exception as e:
+            logger.exception(f"[{user_id}] Error updating goal deadline: {e}")
+
         # Check feasibility
         try:
             feasibility_response = http_client.post(

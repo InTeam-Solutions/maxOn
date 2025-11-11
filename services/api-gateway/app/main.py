@@ -213,6 +213,9 @@ async def show_goals_for_user(chat_id: int, user_id: str, bot_instance):
                 # Add action buttons at the bottom
                 goal_buttons.append([
                     InlineKeyboardButton(text="➕ Новая цель", callback_data="new_goal"),
+                    InlineKeyboardButton(text="✏️ Редактировать", callback_data="settings_goals")
+                ])
+                goal_buttons.append([
                     InlineKeyboardButton(text="🏠 Меню", callback_data="main_menu")
                 ])
 
@@ -283,6 +286,9 @@ async def show_events_for_user(chat_id: int, user_id: str, bot_instance):
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[
                     [
                         InlineKeyboardButton(text="➕ Новое событие", callback_data="new_event"),
+                        InlineKeyboardButton(text="✏️ Редактировать", callback_data="settings_events")
+                    ],
+                    [
                         InlineKeyboardButton(text="🏠 Меню", callback_data="main_menu")
                     ]
                 ])
@@ -946,6 +952,295 @@ async def handle_message(message: types.Message):
     await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")
 
     try:
+        # Check if user is in an editing state
+        session_response = await http_client.get(f"{CONTEXT_SERVICE_URL}/api/session/{user_id}")
+
+        if session_response.status_code == 200:
+            session = session_response.json()
+            current_state = session.get("current_state", "idle")
+            context = session.get("context", {})
+
+            # Handle event field editing
+            if current_state.startswith("event_edit_"):
+                field = current_state.replace("event_edit_", "")
+                event_id = context.get("event_id")
+
+                if event_id:
+                    try:
+                        # Prepare update data based on field
+                        update_data = {}
+
+                        if field == "title":
+                            update_data["title"] = user_msg
+                        elif field == "date":
+                            update_data["date"] = user_msg
+                        elif field == "time_start":
+                            update_data["time_start"] = user_msg
+                        elif field == "time_end":
+                            update_data["time_end"] = user_msg if user_msg.strip() else None
+                        elif field == "duration":
+                            try:
+                                update_data["duration_minutes"] = int(user_msg)
+                            except ValueError:
+                                await message.answer(
+                                    "❌ Пожалуйста, введи число (длительность в минутах)",
+                                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                                        [InlineKeyboardButton(text="◀️ Назад", callback_data=f"manage_event_{event_id}")]
+                                    ])
+                                )
+                                return
+                        elif field == "repeat":
+                            update_data["repeat_pattern"] = user_msg if user_msg.strip() else None
+                        elif field == "notes":
+                            update_data["notes"] = user_msg
+
+                        # Update event via Core Service
+                        update_response = await http_client.patch(
+                            f"{CORE_SERVICE_URL}/api/events/{event_id}",
+                            params={"user_id": user_id},
+                            json=update_data
+                        )
+
+                        if update_response.status_code == 200:
+                            # Reset session state
+                            await http_client.put(
+                                f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+                                json={
+                                    "current_state": "idle",
+                                    "context": {},
+                                    "expiry_hours": 1
+                                }
+                            )
+
+                            # Show success and redirect to event detail
+                            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                                [InlineKeyboardButton(text="◀️ К событию", callback_data=f"manage_event_{event_id}")],
+                                [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")]
+                            ])
+
+                            field_names = {
+                                "title": "название",
+                                "date": "дата",
+                                "time_start": "время начала",
+                                "time_end": "время окончания",
+                                "duration": "длительность",
+                                "repeat": "повторение",
+                                "notes": "заметки"
+                            }
+
+                            await message.answer(
+                                f"✅ Успешно обновлено поле: <b>{field_names.get(field, field)}</b>",
+                                parse_mode="HTML",
+                                reply_markup=keyboard
+                            )
+                            return
+                        else:
+                            raise Exception("Failed to update event")
+
+                    except Exception as e:
+                        logger.exception(f"Error updating event field: {e}")
+                        await message.answer(
+                            "❌ Произошла ошибка при обновлении события.",
+                            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                                [InlineKeyboardButton(text="◀️ Назад", callback_data=f"manage_event_{event_id}")]
+                            ])
+                        )
+                        return
+
+            # Handle goal field editing
+            elif current_state.startswith("goal_edit_"):
+                field = current_state.replace("goal_edit_", "")
+                goal_id = context.get("goal_id")
+
+                if goal_id:
+                    try:
+                        # Prepare update data based on field
+                        update_data = {}
+
+                        if field == "title":
+                            update_data["title"] = user_msg
+                        elif field == "description":
+                            update_data["description"] = user_msg
+                        elif field == "deadline":
+                            update_data["target_date"] = user_msg
+
+                        # Update goal via Core Service
+                        update_response = await http_client.patch(
+                            f"{CORE_SERVICE_URL}/api/goals/{goal_id}",
+                            params={"user_id": user_id},
+                            json=update_data
+                        )
+
+                        if update_response.status_code == 200:
+                            # Reset session state
+                            await http_client.put(
+                                f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+                                json={
+                                    "current_state": "idle",
+                                    "context": {},
+                                    "expiry_hours": 1
+                                }
+                            )
+
+                            # Show success and redirect to goal detail
+                            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                                [InlineKeyboardButton(text="◀️ К цели", callback_data=f"manage_goal_{goal_id}")],
+                                [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")]
+                            ])
+
+                            field_names = {
+                                "title": "название",
+                                "description": "описание",
+                                "deadline": "дедлайн"
+                            }
+
+                            await message.answer(
+                                f"✅ Успешно обновлено поле: <b>{field_names.get(field, field)}</b>",
+                                parse_mode="HTML",
+                                reply_markup=keyboard
+                            )
+                            return
+                        else:
+                            raise Exception("Failed to update goal")
+
+                    except Exception as e:
+                        logger.exception(f"Error updating goal field: {e}")
+                        await message.answer(
+                            "❌ Произошла ошибка при обновлении цели.",
+                            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                                [InlineKeyboardButton(text="◀️ Назад", callback_data=f"manage_goal_{goal_id}")]
+                            ])
+                        )
+                        return
+
+            # Handle step field editing
+            elif current_state.startswith("step_edit_"):
+                field = current_state.replace("step_edit_", "")
+                step_id = context.get("step_id")
+
+                if step_id:
+                    try:
+                        # Prepare update data based on field
+                        update_data = {}
+
+                        if field == "title":
+                            update_data["title"] = user_msg
+                        elif field == "description":
+                            update_data["description"] = user_msg
+
+                        # Update step via Core Service
+                        update_response = await http_client.patch(
+                            f"{CORE_SERVICE_URL}/api/steps/{step_id}",
+                            params={"user_id": user_id},
+                            json=update_data
+                        )
+
+                        if update_response.status_code == 200:
+                            # Reset session state
+                            await http_client.put(
+                                f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+                                json={
+                                    "current_state": "idle",
+                                    "context": {},
+                                    "expiry_hours": 1
+                                }
+                            )
+
+                            # Show success and redirect to step detail
+                            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                                [InlineKeyboardButton(text="◀️ К шагу", callback_data=f"edit_step_{step_id}")],
+                                [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")]
+                            ])
+
+                            field_names = {
+                                "title": "название",
+                                "description": "описание"
+                            }
+
+                            await message.answer(
+                                f"✅ Успешно обновлено поле: <b>{field_names.get(field, field)}</b>",
+                                parse_mode="HTML",
+                                reply_markup=keyboard
+                            )
+                            return
+                        else:
+                            raise Exception("Failed to update step")
+
+                    except Exception as e:
+                        logger.exception(f"Error updating step field: {e}")
+                        await message.answer(
+                            "❌ Произошла ошибка при обновлении шага.",
+                            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                                [InlineKeyboardButton(text="◀️ Назад", callback_data=f"edit_step_{step_id}")]
+                            ])
+                        )
+                        return
+
+            # Handle adding a new step
+            elif current_state == "step_add_title":
+                goal_id = context.get("goal_id")
+
+                if goal_id:
+                    try:
+                        # Get current steps count for order_index
+                        steps_response = await http_client.get(
+                            f"{CORE_SERVICE_URL}/api/goals/{goal_id}/steps",
+                            params={"user_id": user_id}
+                        )
+
+                        order_index = 0
+                        if steps_response.status_code == 200:
+                            steps = steps_response.json()
+                            order_index = len(steps)
+
+                        # Create new step via Core Service
+                        create_response = await http_client.post(
+                            f"{CORE_SERVICE_URL}/api/steps",
+                            params={"user_id": user_id},
+                            json={
+                                "goal_id": goal_id,
+                                "title": user_msg,
+                                "status": "pending",
+                                "order_index": order_index
+                            }
+                        )
+
+                        if create_response.status_code == 200:
+                            # Reset session state
+                            await http_client.put(
+                                f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+                                json={
+                                    "current_state": "idle",
+                                    "context": {},
+                                    "expiry_hours": 1
+                                }
+                            )
+
+                            # Show success and redirect to steps list
+                            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                                [InlineKeyboardButton(text="◀️ К списку шагов", callback_data=f"manage_steps_{goal_id}")],
+                                [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")]
+                            ])
+
+                            await message.answer(
+                                f"✅ Новый шаг добавлен: <b>{user_msg}</b>",
+                                parse_mode="HTML",
+                                reply_markup=keyboard
+                            )
+                            return
+                        else:
+                            raise Exception("Failed to create step")
+
+                    except Exception as e:
+                        logger.exception(f"Error creating step: {e}")
+                        await message.answer(
+                            "❌ Произошла ошибка при создании шага.",
+                            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                                [InlineKeyboardButton(text="◀️ Назад", callback_data=f"manage_steps_{goal_id}")]
+                            ])
+                        )
+                        return
+
         # Send to Orchestrator
         response = await http_client.post(
             f"{ORCHESTRATOR_URL}/api/process",
@@ -1130,6 +1425,1862 @@ async def on_startup():
     logger.info("✅ Bot commands menu set")
 
     logger.info("✅ Telegram Bot started successfully")
+
+
+# ==================== SETTINGS MENU HANDLERS ====================
+
+@dp.callback_query(F.data == "settings_menu")
+async def callback_settings_menu(callback: CallbackQuery):
+    """Handle settings menu button"""
+    await callback.answer()
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📅 Управление событиями", callback_data="settings_events")],
+        [InlineKeyboardButton(text="🎯 Управление целями", callback_data="settings_goals")],
+        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")]
+    ])
+
+    await callback.message.edit_text(
+        "⚙️ <b>Настройки</b>\n\n"
+        "Выбери, чем хочешь управлять:",
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+
+
+@dp.callback_query(F.data == "settings_events")
+async def callback_settings_events(callback: CallbackQuery):
+    """Handle event management menu"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+
+    try:
+        # Fetch all events from Core Service
+        response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/events",
+            params={
+                "user_id": user_id,
+                "limit": 50
+            }
+        )
+
+        if response.status_code == 200:
+            events = response.json()
+
+            if not events:
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="➕ Добавить событие", callback_data="new_event")],
+                    [InlineKeyboardButton(text="◀️ Назад", callback_data="settings_menu")]
+                ])
+                await callback.message.edit_text(
+                    "📅 <b>Управление событиями</b>\n\n"
+                    "У тебя пока нет событий.",
+                    parse_mode="HTML",
+                    reply_markup=keyboard
+                )
+                return
+
+            # Create buttons for each event
+            event_buttons = []
+            for event in events[:10]:  # Show first 10
+                date = event.get("date", "")
+                title = event.get("title", "Без названия")
+                event_buttons.append([
+                    InlineKeyboardButton(
+                        text=f"📅 {date} - {title[:30]}",
+                        callback_data=f"manage_event_{event['id']}"
+                    )
+                ])
+
+            # Add action buttons
+            event_buttons.append([
+                InlineKeyboardButton(text="➕ Добавить событие", callback_data="new_event"),
+                InlineKeyboardButton(text="🗑️📦 Удалить несколько", callback_data="bulk_delete_events")
+            ])
+            event_buttons.append([
+                InlineKeyboardButton(text="◀️ Назад", callback_data="settings_menu")
+            ])
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=event_buttons)
+            await callback.message.edit_text(
+                f"📅 <b>Управление событиями</b>\n\n"
+                f"Всего событий: {len(events)}\n"
+                f"Выбери событие для редактирования:",
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+        else:
+            raise Exception("Failed to fetch events")
+
+    except Exception as e:
+        logger.exception(f"Error in settings_events: {e}")
+        await callback.message.edit_text("Произошла ошибка при загрузке событий.")
+
+
+@dp.callback_query(F.data == "settings_goals")
+async def callback_settings_goals(callback: CallbackQuery):
+    """Handle goal management menu"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+
+    try:
+        # Fetch all goals from Core Service
+        response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/goals",
+            params={"user_id": user_id}
+        )
+
+        if response.status_code == 200:
+            goals = response.json()
+
+            if not goals:
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="➕ Добавить цель", callback_data="new_goal")],
+                    [InlineKeyboardButton(text="◀️ Назад", callback_data="settings_menu")]
+                ])
+                await callback.message.edit_text(
+                    "🎯 <b>Управление целями</b>\n\n"
+                    "У тебя пока нет целей.",
+                    parse_mode="HTML",
+                    reply_markup=keyboard
+                )
+                return
+
+            # Create buttons for each goal
+            goal_buttons = []
+            for goal in goals:
+                status_emoji = "✅" if goal.get("status") == "completed" else "📦" if goal.get("status") == "archived" else "🎯"
+                title = goal.get("title", "Без названия")
+                progress = goal.get("progress_percent", 0)
+
+                goal_buttons.append([
+                    InlineKeyboardButton(
+                        text=f"{status_emoji} {title[:30]} ({progress:.0f}%)",
+                        callback_data=f"manage_goal_{goal['id']}"
+                    )
+                ])
+
+            # Add action buttons
+            goal_buttons.append([
+                InlineKeyboardButton(text="➕ Добавить цель", callback_data="new_goal"),
+                InlineKeyboardButton(text="🗑️📦 Удалить несколько", callback_data="bulk_delete_goals")
+            ])
+            goal_buttons.append([
+                InlineKeyboardButton(text="◀️ Назад", callback_data="settings_menu")
+            ])
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=goal_buttons)
+            await callback.message.edit_text(
+                f"🎯 <b>Управление целями</b>\n\n"
+                f"Всего целей: {len(goals)}\n"
+                f"Выбери цель для редактирования:",
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+        else:
+            raise Exception("Failed to fetch goals")
+
+    except Exception as e:
+        logger.exception(f"Error in settings_goals: {e}")
+        await callback.message.edit_text("Произошла ошибка при загрузке целей.")
+
+
+@dp.callback_query(F.data.startswith("manage_event_"))
+async def callback_manage_event(callback: CallbackQuery):
+    """Handle individual event management"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+
+    try:
+        # Extract event_id from callback_data (format: manage_event_{event_id})
+        event_id = callback.data.split("_")[2]
+
+        # Fetch event details from Core Service
+        response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/events/{event_id}",
+            params={"user_id": user_id}
+        )
+
+        if response.status_code == 200:
+            event = response.json()
+
+            # Format event details
+            title = event.get("title", "Без названия")
+            date = event.get("date", "Не указана")
+            time_start = event.get("time_start", "Не указано")
+            time_end = event.get("time_end", "")
+            duration = event.get("duration_minutes")
+            repeat_pattern = event.get("repeat_pattern")
+            notes = event.get("notes", "")
+
+            # Build display text
+            text = f"📅 <b>{title}</b>\n\n"
+            text += f"📆 <b>Дата:</b> {date}\n"
+            text += f"⏰ <b>Время начала:</b> {time_start}\n"
+
+            if time_end:
+                text += f"⏱ <b>Время окончания:</b> {time_end}\n"
+            if duration:
+                text += f"⏱ <b>Длительность:</b> {duration} мин\n"
+
+            if repeat_pattern:
+                text += f"🔁 <b>Повторение:</b> {repeat_pattern}\n"
+
+            if notes:
+                text += f"\n💬 <b>Заметки:</b>\n<i>{notes}</i>\n"
+
+            # Create edit buttons
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="✏️ Название", callback_data=f"edit_event_title_{event_id}"),
+                    InlineKeyboardButton(text="📅 Дата", callback_data=f"edit_event_date_{event_id}")
+                ],
+                [
+                    InlineKeyboardButton(text="⏰ Время начала", callback_data=f"edit_event_time_start_{event_id}"),
+                    InlineKeyboardButton(text="⏱ Время окончания", callback_data=f"edit_event_time_end_{event_id}")
+                ],
+                [
+                    InlineKeyboardButton(text="⏱ Длительность", callback_data=f"edit_event_duration_{event_id}"),
+                    InlineKeyboardButton(text="🔁 Повторение", callback_data=f"edit_event_repeat_{event_id}")
+                ],
+                [
+                    InlineKeyboardButton(text="📝 Заметки", callback_data=f"edit_event_notes_{event_id}")
+                ],
+                [
+                    InlineKeyboardButton(text="🗑️ Удалить событие", callback_data=f"delete_event_{event_id}")
+                ],
+                [
+                    InlineKeyboardButton(text="◀️ Назад к списку", callback_data="settings_events")
+                ]
+            ])
+
+            await callback.message.edit_text(
+                text,
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+        else:
+            raise Exception("Failed to fetch event")
+
+    except Exception as e:
+        logger.exception(f"Error in manage_event: {e}")
+        await callback.message.edit_text(
+            "❌ Произошла ошибка при загрузке события.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="settings_events")]
+            ])
+        )
+
+
+@dp.callback_query(F.data.startswith("manage_goal_"))
+async def callback_manage_goal(callback: CallbackQuery):
+    """Handle individual goal management"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+
+    try:
+        # Extract goal_id from callback_data (format: manage_goal_{goal_id})
+        goal_id = callback.data.split("_")[2]
+
+        # Fetch goal details from Core Service
+        response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/goals/{goal_id}",
+            params={"user_id": user_id}
+        )
+
+        if response.status_code == 200:
+            goal = response.json()
+
+            # Format goal details
+            title = goal.get("title", "Без названия")
+            description = goal.get("description", "")
+            status = goal.get("status", "active")
+            target_date = goal.get("target_date")
+            progress = goal.get("progress_percent", 0)
+
+            status_emoji = "✅" if status == "completed" else "📦" if status == "archived" else "🎯"
+            status_text = "Завершена" if status == "completed" else "Архивирована" if status == "archived" else "Активна"
+
+            # Format deadline nicely
+            if target_date:
+                try:
+                    from datetime import datetime
+                    date_obj = datetime.fromisoformat(target_date)
+                    deadline_str = date_obj.strftime("%d.%m.%Y")
+                except:
+                    deadline_str = target_date
+            else:
+                deadline_str = "Не указан"
+
+            # Build display text
+            text = f"{status_emoji} <b>{title}</b>\n\n"
+            text += f"📊 <b>Статус:</b> {status_text}\n"
+            text += f"📈 <b>Прогресс:</b> {progress:.0f}%\n"
+            text += f"📅 <b>Дедлайн:</b> {deadline_str}\n"
+
+            if description:
+                text += f"\n💡 <b>Описание:</b>\n<i>{description}</i>\n"
+
+            # Fetch steps for this goal
+            steps_response = await http_client.get(
+                f"{CORE_SERVICE_URL}/api/goals/{goal_id}/steps",
+                params={"user_id": user_id}
+            )
+
+            if steps_response.status_code == 200:
+                steps = steps_response.json()
+                if steps:
+                    text += f"\n📋 <b>Шагов:</b> {len(steps)}\n"
+
+            # Create edit buttons
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="✏️ Название", callback_data=f"edit_goal_title_{goal_id}"),
+                    InlineKeyboardButton(text="📝 Описание", callback_data=f"edit_goal_description_{goal_id}")
+                ],
+                [
+                    InlineKeyboardButton(text="📅 Дедлайн", callback_data=f"edit_goal_deadline_{goal_id}"),
+                    InlineKeyboardButton(text="📊 Статус", callback_data=f"edit_goal_status_{goal_id}")
+                ],
+                [
+                    InlineKeyboardButton(text="📋 Управление шагами", callback_data=f"manage_steps_{goal_id}")
+                ],
+                [
+                    InlineKeyboardButton(text="🗑️ Удалить цель", callback_data=f"delete_goal_{goal_id}")
+                ],
+                [
+                    InlineKeyboardButton(text="◀️ Назад к списку", callback_data="settings_goals")
+                ]
+            ])
+
+            await callback.message.edit_text(
+                text,
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+        else:
+            raise Exception("Failed to fetch goal")
+
+    except Exception as e:
+        logger.exception(f"Error in manage_goal: {e}")
+        await callback.message.edit_text(
+            "❌ Произошла ошибка при загрузке цели.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="settings_goals")]
+            ])
+        )
+
+
+# ==================== EVENT FIELD EDITING HANDLERS ====================
+
+@dp.callback_query(F.data.startswith("edit_event_title_"))
+async def callback_edit_event_title(callback: CallbackQuery):
+    """Handle event title editing"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    event_id = callback.data.split("_")[3]
+
+    try:
+        # Set session state
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "event_edit_title",
+                "context": {"event_id": event_id},
+                "expiry_hours": 2
+            }
+        )
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_event_{event_id}")]
+        ])
+
+        await callback.message.edit_text(
+            "✏️ <b>Редактирование названия события</b>\n\n"
+            "Введи новое название:",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.exception(f"Error in edit_event_title: {e}")
+
+
+@dp.callback_query(F.data.startswith("edit_event_date_"))
+async def callback_edit_event_date(callback: CallbackQuery):
+    """Handle event date editing"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    event_id = callback.data.split("_")[3]
+
+    try:
+        # Set session state
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "event_edit_date",
+                "context": {"event_id": event_id},
+                "expiry_hours": 2
+            }
+        )
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_event_{event_id}")]
+        ])
+
+        await callback.message.edit_text(
+            "📅 <b>Редактирование даты события</b>\n\n"
+            "Введи новую дату в формате YYYY-MM-DD\n"
+            "(например: 2025-12-31):",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.exception(f"Error in edit_event_date: {e}")
+
+
+@dp.callback_query(F.data.startswith("edit_event_time_start_"))
+async def callback_edit_event_time_start(callback: CallbackQuery):
+    """Handle event start time editing"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    event_id = callback.data.split("_")[4]
+
+    try:
+        # Set session state
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "event_edit_time_start",
+                "context": {"event_id": event_id},
+                "expiry_hours": 2
+            }
+        )
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_event_{event_id}")]
+        ])
+
+        await callback.message.edit_text(
+            "⏰ <b>Редактирование времени начала</b>\n\n"
+            "Введи новое время в формате HH:MM\n"
+            "(например: 14:30):",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.exception(f"Error in edit_event_time_start: {e}")
+
+
+@dp.callback_query(F.data.startswith("edit_event_time_end_"))
+async def callback_edit_event_time_end(callback: CallbackQuery):
+    """Handle event end time editing"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    event_id = callback.data.split("_")[4]
+
+    try:
+        # Set session state
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "event_edit_time_end",
+                "context": {"event_id": event_id},
+                "expiry_hours": 2
+            }
+        )
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_event_{event_id}")]
+        ])
+
+        await callback.message.edit_text(
+            "⏱ <b>Редактирование времени окончания</b>\n\n"
+            "Введи новое время в формате HH:MM\n"
+            "(например: 16:00):",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.exception(f"Error in edit_event_time_end: {e}")
+
+
+@dp.callback_query(F.data.startswith("edit_event_duration_"))
+async def callback_edit_event_duration(callback: CallbackQuery):
+    """Handle event duration editing"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    event_id = callback.data.split("_")[3]
+
+    try:
+        # Set session state
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "event_edit_duration",
+                "context": {"event_id": event_id},
+                "expiry_hours": 2
+            }
+        )
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_event_{event_id}")]
+        ])
+
+        await callback.message.edit_text(
+            "⏱ <b>Редактирование длительности</b>\n\n"
+            "Введи длительность в минутах\n"
+            "(например: 60):",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.exception(f"Error in edit_event_duration: {e}")
+
+
+@dp.callback_query(F.data.startswith("edit_event_repeat_"))
+async def callback_edit_event_repeat(callback: CallbackQuery):
+    """Handle event repeat pattern editing"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    event_id = callback.data.split("_")[3]
+
+    try:
+        # Set session state
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "event_edit_repeat",
+                "context": {"event_id": event_id},
+                "expiry_hours": 2
+            }
+        )
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_event_{event_id}")]
+        ])
+
+        await callback.message.edit_text(
+            "🔁 <b>Редактирование повторения</b>\n\n"
+            "Введи паттерн повторения:\n"
+            "• daily - каждый день\n"
+            "• weekly - каждую неделю\n"
+            "• monthly - каждый месяц\n"
+            "• или оставь пустым для отмены повторения",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.exception(f"Error in edit_event_repeat: {e}")
+
+
+@dp.callback_query(F.data.startswith("edit_event_notes_"))
+async def callback_edit_event_notes(callback: CallbackQuery):
+    """Handle event notes editing"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    event_id = callback.data.split("_")[3]
+
+    try:
+        # Set session state
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "event_edit_notes",
+                "context": {"event_id": event_id},
+                "expiry_hours": 2
+            }
+        )
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_event_{event_id}")]
+        ])
+
+        await callback.message.edit_text(
+            "📝 <b>Редактирование заметок</b>\n\n"
+            "Введи новые заметки для события:",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.exception(f"Error in edit_event_notes: {e}")
+
+
+@dp.callback_query(F.data.startswith("delete_event_"))
+async def callback_delete_event(callback: CallbackQuery):
+    """Handle event deletion confirmation"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    event_id = callback.data.split("_")[2]
+
+    try:
+        # Get event details for confirmation
+        response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/events/{event_id}",
+            params={"user_id": user_id}
+        )
+
+        if response.status_code == 200:
+            event = response.json()
+            title = event.get("title", "Без названия")
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"confirm_delete_event_{event_id}"),
+                    InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_event_{event_id}")
+                ]
+            ])
+
+            await callback.message.edit_text(
+                f"🗑️ <b>Удаление события</b>\n\n"
+                f"Ты уверен, что хочешь удалить событие:\n"
+                f"<b>{title}</b>?\n\n"
+                f"Это действие нельзя отменить.",
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+    except Exception as e:
+        logger.exception(f"Error in delete_event: {e}")
+
+
+@dp.callback_query(F.data.startswith("confirm_delete_event_"))
+async def callback_confirm_delete_event(callback: CallbackQuery):
+    """Confirm and execute event deletion"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    event_id = callback.data.split("_")[3]
+
+    try:
+        # Delete event via Core Service
+        response = await http_client.delete(
+            f"{CORE_SERVICE_URL}/api/events/{event_id}",
+            params={"user_id": user_id}
+        )
+
+        if response.status_code == 200:
+            await callback.message.edit_text(
+                "✅ Событие успешно удалено!",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="◀️ К списку событий", callback_data="settings_events")]
+                ])
+            )
+        else:
+            raise Exception("Failed to delete event")
+
+    except Exception as e:
+        logger.exception(f"Error confirming delete event: {e}")
+        await callback.message.edit_text(
+            "❌ Произошла ошибка при удалении события.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="settings_events")]
+            ])
+        )
+
+
+# ==================== GOAL FIELD EDITING HANDLERS ====================
+
+@dp.callback_query(F.data.startswith("edit_goal_title_"))
+async def callback_edit_goal_title(callback: CallbackQuery):
+    """Handle goal title editing"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    goal_id = callback.data.split("_")[3]
+
+    try:
+        # Set session state
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "goal_edit_title",
+                "context": {"goal_id": goal_id},
+                "expiry_hours": 2
+            }
+        )
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_goal_{goal_id}")]
+        ])
+
+        await callback.message.edit_text(
+            "✏️ <b>Редактирование названия цели</b>\n\n"
+            "Введи новое название:",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.exception(f"Error in edit_goal_title: {e}")
+
+
+@dp.callback_query(F.data.startswith("edit_goal_description_"))
+async def callback_edit_goal_description(callback: CallbackQuery):
+    """Handle goal description editing"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    goal_id = callback.data.split("_")[3]
+
+    try:
+        # Set session state
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "goal_edit_description",
+                "context": {"goal_id": goal_id},
+                "expiry_hours": 2
+            }
+        )
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_goal_{goal_id}")]
+        ])
+
+        await callback.message.edit_text(
+            "📝 <b>Редактирование описания цели</b>\n\n"
+            "Введи новое описание:",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.exception(f"Error in edit_goal_description: {e}")
+
+
+@dp.callback_query(F.data.startswith("edit_goal_deadline_"))
+async def callback_edit_goal_deadline(callback: CallbackQuery):
+    """Handle goal deadline editing"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    goal_id = callback.data.split("_")[3]
+
+    try:
+        # Set session state
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "goal_edit_deadline",
+                "context": {"goal_id": goal_id},
+                "expiry_hours": 2
+            }
+        )
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_goal_{goal_id}")]
+        ])
+
+        await callback.message.edit_text(
+            "📅 <b>Редактирование дедлайна</b>\n\n"
+            "Введи новый дедлайн в формате YYYY-MM-DD\n"
+            "(например: 2025-12-31):",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.exception(f"Error in edit_goal_deadline: {e}")
+
+
+@dp.callback_query(F.data.startswith("edit_goal_status_"))
+async def callback_edit_goal_status(callback: CallbackQuery):
+    """Handle goal status editing with buttons"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    goal_id = callback.data.split("_")[3]
+
+    try:
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🎯 Активна", callback_data=f"set_goal_status_{goal_id}_active"),
+                InlineKeyboardButton(text="✅ Завершена", callback_data=f"set_goal_status_{goal_id}_completed")
+            ],
+            [
+                InlineKeyboardButton(text="📦 Архивирована", callback_data=f"set_goal_status_{goal_id}_archived")
+            ],
+            [
+                InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_goal_{goal_id}")
+            ]
+        ])
+
+        await callback.message.edit_text(
+            "📊 <b>Изменение статуса цели</b>\n\n"
+            "Выбери новый статус:",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.exception(f"Error in edit_goal_status: {e}")
+
+
+@dp.callback_query(F.data.startswith("set_goal_status_"))
+async def callback_set_goal_status(callback: CallbackQuery):
+    """Set goal status"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    parts = callback.data.split("_")
+    goal_id = parts[3]
+    new_status = parts[4]
+
+    try:
+        # Update goal status via Core Service
+        response = await http_client.patch(
+            f"{CORE_SERVICE_URL}/api/goals/{goal_id}",
+            params={"user_id": user_id},
+            json={"status": new_status}
+        )
+
+        if response.status_code == 200:
+            status_names = {
+                "active": "Активна",
+                "completed": "Завершена",
+                "archived": "Архивирована"
+            }
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ К цели", callback_data=f"manage_goal_{goal_id}")],
+                [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")]
+            ])
+
+            await callback.message.edit_text(
+                f"✅ Статус цели изменен на: <b>{status_names.get(new_status, new_status)}</b>",
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+        else:
+            raise Exception("Failed to update goal status")
+
+    except Exception as e:
+        logger.exception(f"Error setting goal status: {e}")
+        await callback.message.edit_text(
+            "❌ Произошла ошибка при изменении статуса.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Назад", callback_data=f"manage_goal_{goal_id}")]
+            ])
+        )
+
+
+@dp.callback_query(F.data.startswith("delete_goal_"))
+async def callback_delete_goal(callback: CallbackQuery):
+    """Handle goal deletion confirmation"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    goal_id = callback.data.split("_")[2]
+
+    try:
+        # Get goal details for confirmation
+        response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/goals/{goal_id}",
+            params={"user_id": user_id}
+        )
+
+        if response.status_code == 200:
+            goal = response.json()
+            title = goal.get("title", "Без названия")
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"confirm_delete_goal_{goal_id}"),
+                    InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_goal_{goal_id}")
+                ]
+            ])
+
+            await callback.message.edit_text(
+                f"🗑️ <b>Удаление цели</b>\n\n"
+                f"Ты уверен, что хочешь удалить цель:\n"
+                f"<b>{title}</b>?\n\n"
+                f"Все связанные шаги также будут удалены.\n"
+                f"Это действие нельзя отменить.",
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+    except Exception as e:
+        logger.exception(f"Error in delete_goal: {e}")
+
+
+@dp.callback_query(F.data.startswith("confirm_delete_goal_"))
+async def callback_confirm_delete_goal(callback: CallbackQuery):
+    """Confirm and execute goal deletion"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    goal_id = callback.data.split("_")[3]
+
+    try:
+        # Delete goal via Core Service
+        response = await http_client.delete(
+            f"{CORE_SERVICE_URL}/api/goals/{goal_id}",
+            params={"user_id": user_id}
+        )
+
+        if response.status_code == 200:
+            await callback.message.edit_text(
+                "✅ Цель и все связанные шаги успешно удалены!",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="◀️ К списку целей", callback_data="settings_goals")]
+                ])
+            )
+        else:
+            raise Exception("Failed to delete goal")
+
+    except Exception as e:
+        logger.exception(f"Error confirming delete goal: {e}")
+        await callback.message.edit_text(
+            "❌ Произошла ошибка при удалении цели.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="settings_goals")]
+            ])
+        )
+
+
+# ==================== STEP MANAGEMENT HANDLERS ====================
+
+@dp.callback_query(F.data.startswith("manage_steps_"))
+async def callback_manage_steps(callback: CallbackQuery):
+    """Handle step management for a goal"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    goal_id = callback.data.split("_")[2]
+
+    try:
+        # Fetch goal details
+        goal_response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/goals/{goal_id}",
+            params={"user_id": user_id}
+        )
+
+        if goal_response.status_code != 200:
+            raise Exception("Failed to fetch goal")
+
+        goal = goal_response.json()
+        goal_title = goal.get("title", "Без названия")
+
+        # Fetch steps for this goal
+        steps_response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/goals/{goal_id}/steps",
+            params={"user_id": user_id}
+        )
+
+        if steps_response.status_code == 200:
+            steps = steps_response.json()
+
+            if not steps:
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="➕ Добавить шаг", callback_data=f"add_step_{goal_id}")],
+                    [InlineKeyboardButton(text="◀️ Назад к цели", callback_data=f"manage_goal_{goal_id}")]
+                ])
+                await callback.message.edit_text(
+                    f"📋 <b>Управление шагами</b>\n\n"
+                    f"Цель: <b>{goal_title}</b>\n\n"
+                    f"У этой цели пока нет шагов.",
+                    parse_mode="HTML",
+                    reply_markup=keyboard
+                )
+                return
+
+            # Build step list text with status emojis
+            text = f"📋 <b>Управление шагами</b>\n\n"
+            text += f"Цель: <b>{goal_title}</b>\n\n"
+
+            for i, step in enumerate(steps, 1):
+                status = step.get("status", "pending")
+                status_emoji = "✅" if status == "completed" else "🔄" if status == "in_progress" else "⭕"
+                title = step.get("title", "Без названия")
+                text += f"{i}. {status_emoji} {title[:40]}\n"
+
+            # Create buttons for each step
+            step_buttons = []
+            for step in steps:
+                status = step.get("status", "pending")
+                status_emoji = "✅" if status == "completed" else "🔄" if status == "in_progress" else "⭕"
+                title = step.get("title", "Без названия")
+
+                step_buttons.append([
+                    InlineKeyboardButton(
+                        text=f"{status_emoji} {title[:25]}",
+                        callback_data=f"edit_step_{step['id']}"
+                    )
+                ])
+
+            # Add action buttons
+            step_buttons.append([
+                InlineKeyboardButton(text="➕ Добавить шаг", callback_data=f"add_step_{goal_id}")
+            ])
+            step_buttons.append([
+                InlineKeyboardButton(text="◀️ Назад к цели", callback_data=f"manage_goal_{goal_id}")
+            ])
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=step_buttons)
+            await callback.message.edit_text(
+                text,
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+        else:
+            raise Exception("Failed to fetch steps")
+
+    except Exception as e:
+        logger.exception(f"Error in manage_steps: {e}")
+        await callback.message.edit_text(
+            "❌ Произошла ошибка при загрузке шагов.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Назад", callback_data=f"manage_goal_{goal_id}")]
+            ])
+        )
+
+
+@dp.callback_query(F.data.startswith("edit_step_"))
+async def callback_edit_step(callback: CallbackQuery):
+    """Handle individual step editing"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    step_id = callback.data.split("_")[2]
+
+    try:
+        # Fetch step details
+        response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/steps/{step_id}",
+            params={"user_id": user_id}
+        )
+
+        if response.status_code == 200:
+            step = response.json()
+            goal_id = step.get("goal_id")
+
+            title = step.get("title", "Без названия")
+            description = step.get("description", "")
+            status = step.get("status", "pending")
+            order_index = step.get("order_index", 0)
+
+            status_emoji = "✅" if status == "completed" else "🔄" if status == "in_progress" else "⭕"
+            status_text = "Выполнено" if status == "completed" else "В процессе" if status == "in_progress" else "Ожидает"
+
+            # Build display text
+            text = f"📝 <b>{title}</b>\n\n"
+            text += f"📊 <b>Статус:</b> {status_emoji} {status_text}\n"
+            text += f"🔢 <b>Порядок:</b> {order_index + 1}\n"
+
+            if description:
+                text += f"\n💭 <b>Описание:</b>\n<i>{description}</i>\n"
+
+            # Create edit buttons
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="✏️ Название", callback_data=f"edit_step_title_{step_id}"),
+                    InlineKeyboardButton(text="📝 Описание", callback_data=f"edit_step_description_{step_id}")
+                ],
+                [
+                    InlineKeyboardButton(text="📊 Статус", callback_data=f"edit_step_status_{step_id}")
+                ],
+                [
+                    InlineKeyboardButton(text="⬆️ Вверх", callback_data=f"move_step_up_{step_id}"),
+                    InlineKeyboardButton(text="⬇️ Вниз", callback_data=f"move_step_down_{step_id}")
+                ],
+                [
+                    InlineKeyboardButton(text="🗑️ Удалить шаг", callback_data=f"delete_step_{step_id}")
+                ],
+                [
+                    InlineKeyboardButton(text="◀️ К списку шагов", callback_data=f"manage_steps_{goal_id}")
+                ]
+            ])
+
+            await callback.message.edit_text(
+                text,
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+        else:
+            raise Exception("Failed to fetch step")
+
+    except Exception as e:
+        logger.exception(f"Error in edit_step: {e}")
+        await callback.message.edit_text(
+            "❌ Произошла ошибка при загрузке шага.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="settings_goals")]
+            ])
+        )
+
+
+# ==================== STEP FIELD EDITING HANDLERS ====================
+
+@dp.callback_query(F.data.startswith("edit_step_title_"))
+async def callback_edit_step_title(callback: CallbackQuery):
+    """Handle step title editing"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    step_id = callback.data.split("_")[3]
+
+    try:
+        # Set session state
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "step_edit_title",
+                "context": {"step_id": step_id},
+                "expiry_hours": 2
+            }
+        )
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"edit_step_{step_id}")]
+        ])
+
+        await callback.message.edit_text(
+            "✏️ <b>Редактирование названия шага</b>\n\n"
+            "Введи новое название:",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.exception(f"Error in edit_step_title: {e}")
+
+
+@dp.callback_query(F.data.startswith("edit_step_description_"))
+async def callback_edit_step_description(callback: CallbackQuery):
+    """Handle step description editing"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    step_id = callback.data.split("_")[3]
+
+    try:
+        # Set session state
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "step_edit_description",
+                "context": {"step_id": step_id},
+                "expiry_hours": 2
+            }
+        )
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"edit_step_{step_id}")]
+        ])
+
+        await callback.message.edit_text(
+            "📝 <b>Редактирование описания шага</b>\n\n"
+            "Введи новое описание:",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.exception(f"Error in edit_step_description: {e}")
+
+
+@dp.callback_query(F.data.startswith("edit_step_status_"))
+async def callback_edit_step_status(callback: CallbackQuery):
+    """Handle step status editing with buttons"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    step_id = callback.data.split("_")[3]
+
+    try:
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="⭕ Ожидает", callback_data=f"set_step_status_{step_id}_pending"),
+                InlineKeyboardButton(text="🔄 В процессе", callback_data=f"set_step_status_{step_id}_in_progress")
+            ],
+            [
+                InlineKeyboardButton(text="✅ Выполнено", callback_data=f"set_step_status_{step_id}_completed")
+            ],
+            [
+                InlineKeyboardButton(text="❌ Отмена", callback_data=f"edit_step_{step_id}")
+            ]
+        ])
+
+        await callback.message.edit_text(
+            "📊 <b>Изменение статуса шага</b>\n\n"
+            "Выбери новый статус:",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.exception(f"Error in edit_step_status: {e}")
+
+
+@dp.callback_query(F.data.startswith("set_step_status_"))
+async def callback_set_step_status(callback: CallbackQuery):
+    """Set step status"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    parts = callback.data.split("_")
+    step_id = parts[3]
+    new_status = parts[4]
+
+    try:
+        # Update step status via Core Service
+        response = await http_client.patch(
+            f"{CORE_SERVICE_URL}/api/steps/{step_id}",
+            params={"user_id": user_id},
+            json={"status": new_status}
+        )
+
+        if response.status_code == 200:
+            status_names = {
+                "pending": "⭕ Ожидает",
+                "in_progress": "🔄 В процессе",
+                "completed": "✅ Выполнено"
+            }
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ К шагу", callback_data=f"edit_step_{step_id}")],
+                [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")]
+            ])
+
+            await callback.message.edit_text(
+                f"✅ Статус шага изменен на: <b>{status_names.get(new_status, new_status)}</b>",
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+        else:
+            raise Exception("Failed to update step status")
+
+    except Exception as e:
+        logger.exception(f"Error setting step status: {e}")
+        await callback.message.edit_text(
+            "❌ Произошла ошибка при изменении статуса.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Назад", callback_data=f"edit_step_{step_id}")]
+            ])
+        )
+
+
+@dp.callback_query(F.data.startswith("move_step_up_"))
+async def callback_move_step_up(callback: CallbackQuery):
+    """Move step up in order"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    step_id = callback.data.split("_")[3]
+
+    try:
+        # Get step details to find goal_id
+        step_response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/steps/{step_id}",
+            params={"user_id": user_id}
+        )
+
+        if step_response.status_code != 200:
+            raise Exception("Failed to fetch step")
+
+        step = step_response.json()
+        goal_id = step.get("goal_id")
+        current_order = step.get("order_index", 0)
+
+        if current_order == 0:
+            await callback.answer("Это уже первый шаг", show_alert=True)
+            return
+
+        # Get all steps for this goal
+        steps_response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/goals/{goal_id}/steps",
+            params={"user_id": user_id}
+        )
+
+        if steps_response.status_code == 200:
+            steps = steps_response.json()
+
+            # Find the step above
+            prev_step = None
+            for s in steps:
+                if s.get("order_index") == current_order - 1:
+                    prev_step = s
+                    break
+
+            if prev_step:
+                # Swap order indices
+                await http_client.patch(
+                    f"{CORE_SERVICE_URL}/api/steps/{step_id}",
+                    params={"user_id": user_id},
+                    json={"order_index": current_order - 1}
+                )
+
+                await http_client.patch(
+                    f"{CORE_SERVICE_URL}/api/steps/{prev_step['id']}",
+                    params={"user_id": user_id},
+                    json={"order_index": current_order}
+                )
+
+                await callback.answer("Шаг перемещен вверх ✅")
+                # Refresh the step detail view
+                await callback_edit_step(callback)
+            else:
+                await callback.answer("Не удалось найти предыдущий шаг", show_alert=True)
+
+    except Exception as e:
+        logger.exception(f"Error moving step up: {e}")
+        await callback.answer("Ошибка при перемещении шага", show_alert=True)
+
+
+@dp.callback_query(F.data.startswith("move_step_down_"))
+async def callback_move_step_down(callback: CallbackQuery):
+    """Move step down in order"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    step_id = callback.data.split("_")[3]
+
+    try:
+        # Get step details to find goal_id
+        step_response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/steps/{step_id}",
+            params={"user_id": user_id}
+        )
+
+        if step_response.status_code != 200:
+            raise Exception("Failed to fetch step")
+
+        step = step_response.json()
+        goal_id = step.get("goal_id")
+        current_order = step.get("order_index", 0)
+
+        # Get all steps for this goal
+        steps_response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/goals/{goal_id}/steps",
+            params={"user_id": user_id}
+        )
+
+        if steps_response.status_code == 200:
+            steps = steps_response.json()
+
+            if current_order >= len(steps) - 1:
+                await callback.answer("Это уже последний шаг", show_alert=True)
+                return
+
+            # Find the step below
+            next_step = None
+            for s in steps:
+                if s.get("order_index") == current_order + 1:
+                    next_step = s
+                    break
+
+            if next_step:
+                # Swap order indices
+                await http_client.patch(
+                    f"{CORE_SERVICE_URL}/api/steps/{step_id}",
+                    params={"user_id": user_id},
+                    json={"order_index": current_order + 1}
+                )
+
+                await http_client.patch(
+                    f"{CORE_SERVICE_URL}/api/steps/{next_step['id']}",
+                    params={"user_id": user_id},
+                    json={"order_index": current_order}
+                )
+
+                await callback.answer("Шаг перемещен вниз ✅")
+                # Refresh the step detail view
+                await callback_edit_step(callback)
+            else:
+                await callback.answer("Не удалось найти следующий шаг", show_alert=True)
+
+    except Exception as e:
+        logger.exception(f"Error moving step down: {e}")
+        await callback.answer("Ошибка при перемещении шага", show_alert=True)
+
+
+@dp.callback_query(F.data.startswith("delete_step_"))
+async def callback_delete_step(callback: CallbackQuery):
+    """Handle step deletion confirmation"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    step_id = callback.data.split("_")[2]
+
+    try:
+        # Get step details for confirmation
+        response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/steps/{step_id}",
+            params={"user_id": user_id}
+        )
+
+        if response.status_code == 200:
+            step = response.json()
+            title = step.get("title", "Без названия")
+            goal_id = step.get("goal_id")
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"confirm_delete_step_{step_id}"),
+                    InlineKeyboardButton(text="❌ Отмена", callback_data=f"edit_step_{step_id}")
+                ]
+            ])
+
+            await callback.message.edit_text(
+                f"🗑️ <b>Удаление шага</b>\n\n"
+                f"Ты уверен, что хочешь удалить шаг:\n"
+                f"<b>{title}</b>?\n\n"
+                f"Это действие нельзя отменить.",
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+    except Exception as e:
+        logger.exception(f"Error in delete_step: {e}")
+
+
+@dp.callback_query(F.data.startswith("confirm_delete_step_"))
+async def callback_confirm_delete_step(callback: CallbackQuery):
+    """Confirm and execute step deletion"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    step_id = callback.data.split("_")[3]
+
+    try:
+        # Get goal_id before deleting
+        step_response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/steps/{step_id}",
+            params={"user_id": user_id}
+        )
+
+        if step_response.status_code != 200:
+            raise Exception("Failed to fetch step")
+
+        goal_id = step_response.json().get("goal_id")
+
+        # Delete step via Core Service
+        response = await http_client.delete(
+            f"{CORE_SERVICE_URL}/api/steps/{step_id}",
+            params={"user_id": user_id}
+        )
+
+        if response.status_code == 200:
+            await callback.message.edit_text(
+                "✅ Шаг успешно удален!",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="◀️ К списку шагов", callback_data=f"manage_steps_{goal_id}")]
+                ])
+            )
+        else:
+            raise Exception("Failed to delete step")
+
+    except Exception as e:
+        logger.exception(f"Error confirming delete step: {e}")
+        await callback.message.edit_text(
+            "❌ Произошла ошибка при удалении шага.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="settings_goals")]
+            ])
+        )
+
+
+@dp.callback_query(F.data.startswith("add_step_"))
+async def callback_add_step(callback: CallbackQuery):
+    """Handle adding a new step"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    goal_id = callback.data.split("_")[2]
+
+    try:
+        # Set session state
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "step_add_title",
+                "context": {"goal_id": goal_id},
+                "expiry_hours": 2
+            }
+        )
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"manage_steps_{goal_id}")]
+        ])
+
+        await callback.message.edit_text(
+            "➕ <b>Добавление нового шага</b>\n\n"
+            "Введи название шага:",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.exception(f"Error in add_step: {e}")
+
+
+# ==================== BULK DELETE HANDLERS ====================
+
+@dp.callback_query(F.data == "bulk_delete_events")
+async def callback_bulk_delete_events(callback: CallbackQuery):
+    """Handle bulk delete events - show selection interface"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+
+    try:
+        # Fetch all events
+        response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/events",
+            params={"user_id": user_id, "limit": 50}
+        )
+
+        if response.status_code == 200:
+            events = response.json()
+
+            if not events:
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="◀️ Назад", callback_data="settings_events")]
+                ])
+                await callback.message.edit_text(
+                    "📅 У тебя нет событий для удаления.",
+                    parse_mode="HTML",
+                    reply_markup=keyboard
+                )
+                return
+
+            # Initialize selection state
+            await http_client.put(
+                f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+                json={
+                    "current_state": "bulk_delete_events",
+                    "context": {"selected_events": []},
+                    "expiry_hours": 1
+                }
+            )
+
+            # Create buttons for each event
+            event_buttons = []
+            for event in events[:20]:  # Limit to 20 for UI
+                date = event.get("date", "")
+                title = event.get("title", "Без названия")
+                event_buttons.append([
+                    InlineKeyboardButton(
+                        text=f"⬜ {date} - {title[:25]}",
+                        callback_data=f"toggle_event_{event['id']}"
+                    )
+                ])
+
+            # Add action buttons
+            event_buttons.append([
+                InlineKeyboardButton(text="🗑️ Удалить выбранные", callback_data="confirm_bulk_delete_events")
+            ])
+            event_buttons.append([
+                InlineKeyboardButton(text="❌ Отмена", callback_data="settings_events")
+            ])
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=event_buttons)
+            await callback.message.edit_text(
+                "📅 <b>Массовое удаление событий</b>\n\n"
+                "Выбери события для удаления (нажми на них):",
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+
+    except Exception as e:
+        logger.exception(f"Error in bulk_delete_events: {e}")
+
+
+@dp.callback_query(F.data.startswith("toggle_event_"))
+async def callback_toggle_event(callback: CallbackQuery):
+    """Toggle event selection"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    event_id = callback.data.split("_")[2]
+
+    try:
+        # Get current selection
+        session_response = await http_client.get(f"{CONTEXT_SERVICE_URL}/api/session/{user_id}")
+
+        if session_response.status_code == 200:
+            session = session_response.json()
+            selected_events = session.get("context", {}).get("selected_events", [])
+
+            # Toggle selection
+            if event_id in selected_events:
+                selected_events.remove(event_id)
+            else:
+                selected_events.append(event_id)
+
+            # Update session
+            await http_client.put(
+                f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+                json={
+                    "current_state": "bulk_delete_events",
+                    "context": {"selected_events": selected_events},
+                    "expiry_hours": 1
+                }
+            )
+
+            # Fetch all events again to rebuild UI
+            response = await http_client.get(
+                f"{CORE_SERVICE_URL}/api/events",
+                params={"user_id": user_id, "limit": 50}
+            )
+
+            if response.status_code == 200:
+                events = response.json()
+
+                # Rebuild buttons with updated selection
+                event_buttons = []
+                for event in events[:20]:
+                    date = event.get("date", "")
+                    title = event.get("title", "Без названия")
+                    is_selected = str(event['id']) in selected_events
+                    checkbox = "☑️" if is_selected else "⬜"
+
+                    event_buttons.append([
+                        InlineKeyboardButton(
+                            text=f"{checkbox} {date} - {title[:25]}",
+                            callback_data=f"toggle_event_{event['id']}"
+                        )
+                    ])
+
+                # Add action buttons
+                event_buttons.append([
+                    InlineKeyboardButton(text=f"🗑️ Удалить выбранные ({len(selected_events)})", callback_data="confirm_bulk_delete_events")
+                ])
+                event_buttons.append([
+                    InlineKeyboardButton(text="❌ Отмена", callback_data="settings_events")
+                ])
+
+                keyboard = InlineKeyboardMarkup(inline_keyboard=event_buttons)
+                await callback.message.edit_text(
+                    f"📅 <b>Массовое удаление событий</b>\n\n"
+                    f"Выбрано: {len(selected_events)}\n"
+                    f"Нажми на события для выбора:",
+                    parse_mode="HTML",
+                    reply_markup=keyboard
+                )
+
+    except Exception as e:
+        logger.exception(f"Error in toggle_event: {e}")
+
+
+@dp.callback_query(F.data == "confirm_bulk_delete_events")
+async def callback_confirm_bulk_delete_events(callback: CallbackQuery):
+    """Confirm and execute bulk delete"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+
+    try:
+        # Get selected events
+        session_response = await http_client.get(f"{CONTEXT_SERVICE_URL}/api/session/{user_id}")
+
+        if session_response.status_code == 200:
+            session = session_response.json()
+            selected_events = session.get("context", {}).get("selected_events", [])
+
+            if not selected_events:
+                await callback.answer("Не выбрано ни одного события", show_alert=True)
+                return
+
+            # Delete each event
+            deleted_count = 0
+            for event_id in selected_events:
+                try:
+                    delete_response = await http_client.delete(
+                        f"{CORE_SERVICE_URL}/api/events/{event_id}",
+                        params={"user_id": user_id}
+                    )
+                    if delete_response.status_code == 200:
+                        deleted_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to delete event {event_id}: {e}")
+
+            # Reset session
+            await http_client.put(
+                f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+                json={
+                    "current_state": "idle",
+                    "context": {},
+                    "expiry_hours": 1
+                }
+            )
+
+            await callback.message.edit_text(
+                f"✅ Удалено событий: {deleted_count} из {len(selected_events)}",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="◀️ К списку событий", callback_data="settings_events")]
+                ])
+            )
+
+    except Exception as e:
+        logger.exception(f"Error in confirm_bulk_delete_events: {e}")
+
+
+@dp.callback_query(F.data == "bulk_delete_goals")
+async def callback_bulk_delete_goals(callback: CallbackQuery):
+    """Handle bulk delete goals - show selection interface"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+
+    try:
+        # Fetch all goals
+        response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/goals",
+            params={"user_id": user_id}
+        )
+
+        if response.status_code == 200:
+            goals = response.json()
+
+            if not goals:
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="◀️ Назад", callback_data="settings_goals")]
+                ])
+                await callback.message.edit_text(
+                    "🎯 У тебя нет целей для удаления.",
+                    parse_mode="HTML",
+                    reply_markup=keyboard
+                )
+                return
+
+            # Initialize selection state
+            await http_client.put(
+                f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+                json={
+                    "current_state": "bulk_delete_goals",
+                    "context": {"selected_goals": []},
+                    "expiry_hours": 1
+                }
+            )
+
+            # Create buttons for each goal
+            goal_buttons = []
+            for goal in goals:
+                status_emoji = "✅" if goal.get("status") == "completed" else "📦" if goal.get("status") == "archived" else "🎯"
+                title = goal.get("title", "Без названия")
+                goal_buttons.append([
+                    InlineKeyboardButton(
+                        text=f"⬜ {status_emoji} {title[:30]}",
+                        callback_data=f"toggle_goal_{goal['id']}"
+                    )
+                ])
+
+            # Add action buttons
+            goal_buttons.append([
+                InlineKeyboardButton(text="🗑️ Удалить выбранные", callback_data="confirm_bulk_delete_goals")
+            ])
+            goal_buttons.append([
+                InlineKeyboardButton(text="❌ Отмена", callback_data="settings_goals")
+            ])
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=goal_buttons)
+            await callback.message.edit_text(
+                "🎯 <b>Массовое удаление целей</b>\n\n"
+                "Выбери цели для удаления (нажми на них):\n"
+                "⚠️ Все шаги также будут удалены!",
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+
+    except Exception as e:
+        logger.exception(f"Error in bulk_delete_goals: {e}")
+
+
+@dp.callback_query(F.data.startswith("toggle_goal_"))
+async def callback_toggle_goal(callback: CallbackQuery):
+    """Toggle goal selection"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+    goal_id = callback.data.split("_")[2]
+
+    try:
+        # Get current selection
+        session_response = await http_client.get(f"{CONTEXT_SERVICE_URL}/api/session/{user_id}")
+
+        if session_response.status_code == 200:
+            session = session_response.json()
+            selected_goals = session.get("context", {}).get("selected_goals", [])
+
+            # Toggle selection
+            if goal_id in selected_goals:
+                selected_goals.remove(goal_id)
+            else:
+                selected_goals.append(goal_id)
+
+            # Update session
+            await http_client.put(
+                f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+                json={
+                    "current_state": "bulk_delete_goals",
+                    "context": {"selected_goals": selected_goals},
+                    "expiry_hours": 1
+                }
+            )
+
+            # Fetch all goals again to rebuild UI
+            response = await http_client.get(
+                f"{CORE_SERVICE_URL}/api/goals",
+                params={"user_id": user_id}
+            )
+
+            if response.status_code == 200:
+                goals = response.json()
+
+                # Rebuild buttons with updated selection
+                goal_buttons = []
+                for goal in goals:
+                    status_emoji = "✅" if goal.get("status") == "completed" else "📦" if goal.get("status") == "archived" else "🎯"
+                    title = goal.get("title", "Без названия")
+                    is_selected = str(goal['id']) in selected_goals
+                    checkbox = "☑️" if is_selected else "⬜"
+
+                    goal_buttons.append([
+                        InlineKeyboardButton(
+                            text=f"{checkbox} {status_emoji} {title[:30]}",
+                            callback_data=f"toggle_goal_{goal['id']}"
+                        )
+                    ])
+
+                # Add action buttons
+                goal_buttons.append([
+                    InlineKeyboardButton(text=f"🗑️ Удалить выбранные ({len(selected_goals)})", callback_data="confirm_bulk_delete_goals")
+                ])
+                goal_buttons.append([
+                    InlineKeyboardButton(text="❌ Отмена", callback_data="settings_goals")
+                ])
+
+                keyboard = InlineKeyboardMarkup(inline_keyboard=goal_buttons)
+                await callback.message.edit_text(
+                    f"🎯 <b>Массовое удаление целей</b>\n\n"
+                    f"Выбрано: {len(selected_goals)}\n"
+                    f"Нажми на цели для выбора:\n"
+                    f"⚠️ Все шаги также будут удалены!",
+                    parse_mode="HTML",
+                    reply_markup=keyboard
+                )
+
+    except Exception as e:
+        logger.exception(f"Error in toggle_goal: {e}")
+
+
+@dp.callback_query(F.data == "confirm_bulk_delete_goals")
+async def callback_confirm_bulk_delete_goals(callback: CallbackQuery):
+    """Confirm and execute bulk delete goals"""
+    await callback.answer()
+    user_id = str(callback.from_user.id)
+
+    try:
+        # Get selected goals
+        session_response = await http_client.get(f"{CONTEXT_SERVICE_URL}/api/session/{user_id}")
+
+        if session_response.status_code == 200:
+            session = session_response.json()
+            selected_goals = session.get("context", {}).get("selected_goals", [])
+
+            if not selected_goals:
+                await callback.answer("Не выбрано ни одной цели", show_alert=True)
+                return
+
+            # Delete each goal
+            deleted_count = 0
+            for goal_id in selected_goals:
+                try:
+                    delete_response = await http_client.delete(
+                        f"{CORE_SERVICE_URL}/api/goals/{goal_id}",
+                        params={"user_id": user_id}
+                    )
+                    if delete_response.status_code == 200:
+                        deleted_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to delete goal {goal_id}: {e}")
+
+            # Reset session
+            await http_client.put(
+                f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+                json={
+                    "current_state": "idle",
+                    "context": {},
+                    "expiry_hours": 1
+                }
+            )
+
+            await callback.message.edit_text(
+                f"✅ Удалено целей: {deleted_count} из {len(selected_goals)}",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="◀️ К списку целей", callback_data="settings_goals")]
+                ])
+            )
+
+    except Exception as e:
+        logger.exception(f"Error in confirm_bulk_delete_goals: {e}")
 
 
 # ==================== SMART GOAL EDITING HANDLERS ====================
