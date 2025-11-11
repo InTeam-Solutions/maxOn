@@ -1051,7 +1051,26 @@ async def handle_message(message: types.Message):
             elif "удалил" in text.lower():
                 await message.react([types.ReactionTypeEmoji(emoji="👍")])
 
-            await message.answer(text)
+            # Check if buttons provided
+            buttons_data = result.get("buttons")
+            if buttons_data:
+                # Build inline keyboard from buttons array
+                keyboard_rows = []
+                for row in buttons_data:
+                    button_row = []
+                    for btn in row:
+                        button_row.append(
+                            InlineKeyboardButton(
+                                text=btn["text"],
+                                callback_data=btn["callback_data"]
+                            )
+                        )
+                    keyboard_rows.append(button_row)
+
+                keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+                await message.answer(text, parse_mode="HTML", reply_markup=keyboard)
+            else:
+                await message.answer(text, parse_mode="HTML")
 
     except httpx.TimeoutException:
         logger.error(f"[{user_id}] Request timeout")
@@ -1111,6 +1130,143 @@ async def on_startup():
     logger.info("✅ Bot commands menu set")
 
     logger.info("✅ Telegram Bot started successfully")
+
+
+# ==================== SMART GOAL EDITING HANDLERS ====================
+
+@dp.callback_query(F.data.startswith("edit_goal_"))
+async def callback_edit_goal(callback: CallbackQuery):
+    """Handle edit goal button from SMART analysis"""
+    user_id = str(callback.from_user.id)
+    await callback.answer()
+
+    try:
+        # Extract goal_id from callback_data (format: edit_goal_{goal_id})
+        goal_id = callback.data.split("_")[2]
+
+        logger.info(f"[{user_id}] Editing goal {goal_id}")
+
+        # Set session state to goal editing
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "goal_editing",
+                "context": {"goal_id": goal_id},
+                "expiry_hours": 4
+            }
+        )
+
+        # Get current goal details
+        response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/goals/{goal_id}?user_id={user_id}"
+        )
+
+        if response.status_code == 200:
+            goal = response.json()
+            text = (
+                f"✏️ <b>Редактирование цели</b>\n\n"
+                f"Текущая цель: <b>{goal['title']}</b>\n\n"
+                f"Напиши новую формулировку цели с учетом рекомендаций SMART:\n"
+                f"• Сделай цель более конкретной\n"
+                f"• Добавь измеримые критерии\n"
+                f"• Убедись что она достижима\n"
+                f"• Проверь релевантность\n"
+                f"• Укажи временные рамки"
+            )
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_goal_edit")]
+            ])
+
+            await callback.message.edit_text(text, parse_mode="HTML", reply_markup=keyboard)
+        else:
+            await callback.message.edit_text("Не удалось загрузить цель. Попробуй еще раз.")
+
+    except Exception as e:
+        logger.exception(f"Error editing goal: {e}")
+        await callback.message.edit_text("Произошла ошибка при редактировании цели.")
+
+
+@dp.callback_query(F.data == "continue_goal")
+async def callback_continue_goal(callback: CallbackQuery):
+    """Handle continue button - skip SMART improvements"""
+    user_id = str(callback.from_user.id)
+    await callback.answer("Отлично! Продолжаем с текущей целью.")
+
+    try:
+        # Just remove buttons and keep the text as is
+        text = callback.message.text or callback.message.caption
+        await callback.message.edit_text(text, parse_mode="HTML")
+
+    except Exception as e:
+        logger.exception(f"Error continuing goal: {e}")
+        await callback.answer("Произошла ошибка", show_alert=True)
+
+
+@dp.callback_query(F.data == "cancel_goal_edit")
+async def callback_cancel_goal_edit(callback: CallbackQuery):
+    """Cancel goal editing"""
+    user_id = str(callback.from_user.id)
+    await callback.answer("Редактирование отменено")
+
+    try:
+        # Reset session state to idle
+        await http_client.put(
+            f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+            json={
+                "current_state": "idle",
+                "context": {},
+                "expiry_hours": 1
+            }
+        )
+
+        # Return to main menu
+        await cmd_start(callback.message)
+
+    except Exception as e:
+        logger.exception(f"Error canceling goal edit: {e}")
+        await callback.answer("Произошла ошибка", show_alert=True)
+
+
+@dp.callback_query(F.data == "continue_to_deadline")
+async def callback_continue_to_deadline(callback: CallbackQuery):
+    """Continue with current goal despite SMART score"""
+    user_id = str(callback.from_user.id)
+    await callback.answer("Продолжаем!")
+
+    try:
+        # Get session context to retrieve goal info
+        session_response = await http_client.get(f"{CONTEXT_SERVICE_URL}/api/session/{user_id}")
+        if session_response.status_code == 200:
+            session = session_response.json()
+            context = session.get("context", {})
+            goal_id = context.get("goal_id")
+
+            # Transition to deadline request state
+            await http_client.put(
+                f"{CONTEXT_SERVICE_URL}/api/session/{user_id}",
+                json={
+                    "current_state": "goal_deadline_request",
+                    "context": context,
+                    "expiry_hours": 4
+                }
+            )
+
+            text = (
+                f"📅 <b>Когда ты хочешь достичь этой цели?</b>\n\n"
+                f"Укажи дедлайн, например:\n"
+                f"• 'через 2 недели'\n"
+                f"• '15 декабря'\n"
+                f"• '2025-12-15'"
+            )
+
+            await callback.message.edit_text(text, parse_mode="HTML")
+        else:
+            await callback.message.edit_text("Произошла ошибка. Попробуй еще раз.")
+
+    except Exception as e:
+        logger.exception(f"Error continuing to deadline: {e}")
+        await callback.answer("Произошла ошибка", show_alert=True)
 
 
 # ==================== CALENDAR HANDLERS ====================

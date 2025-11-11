@@ -17,6 +17,7 @@ from app.prompts.system import SYSTEM_PROMPT_TEMPLATE
 from app.prompts.summarizer import SUMMARIZE_PROMPT_TEMPLATE
 from app.prompts.goal_coach import GOAL_STEPS_PROMPT_TEMPLATE
 from app.prompts.goal_scheduler import SCHEDULE_GOAL_PROMPT_TEMPLATE
+from app.prompts.smart_analyzer import SMART_ANALYSIS_PROMPT_TEMPLATE
 
 # Setup
 app = FastAPI(
@@ -118,6 +119,13 @@ class GenerateScheduleRequest(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     system_prompt: Optional[str] = None
+
+
+class AnalyzeSMARTRequest(BaseModel):
+    goal_title: str
+    description: Optional[str] = None
+    target_date: Optional[str] = None
+    steps: Optional[List[Dict[str, Any]]] = None
 
 
 # ==================== HELPER FUNCTIONS ====================
@@ -414,6 +422,80 @@ async def generate_schedule(request: GenerateScheduleRequest):
         raise HTTPException(status_code=500, detail="Failed to parse LLM response")
     except Exception as e:
         logger.error(f"Error generating schedule: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/analyze-smart")
+async def analyze_smart(request: AnalyzeSMARTRequest):
+    """
+    Analyze goal against SMART criteria
+    Returns detailed feedback and suggestions
+    """
+    try:
+        user_id = "unknown"
+
+        # Check cache
+        cache_key = get_cache_key(
+            "smart",
+            f"{request.goal_title}:{request.description}:{request.target_date}"
+        )
+        cached = get_from_cache(cache_key)
+        if cached:
+            logger.info("Cache hit for analyze-smart")
+            return cached
+
+        # Render prompt
+        prompt = SMART_ANALYSIS_PROMPT_TEMPLATE.render(
+            goal_title=request.goal_title,
+            description=request.description,
+            target_date=request.target_date,
+            steps=request.steps or []
+        )
+
+        # Call OpenAI
+        response = openai_client.chat.completions.create(
+            model=OPENAI_CHAT_MODEL,
+            messages=[
+                {"role": "system", "content": "Ты — коуч по постановке целей. Анализируй цели по методологии SMART и давай конструктивный фидбек."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,
+        )
+
+        raw = response.choices[0].message.content.strip()
+
+        # Try to extract JSON if wrapped in markdown
+        if "```json" in raw:
+            raw = raw.split("```json")[1].split("```")[0].strip()
+        elif "```" in raw:
+            raw = raw.split("```")[1].split("```")[0].strip()
+
+        result = json.loads(raw)
+
+        # Track to Mixpanel
+        usage = response.usage
+        track_event(user_id, "LLM SMART Analysis", {
+            "model": OPENAI_CHAT_MODEL,
+            "goal_title": request.goal_title,
+            "overall_score": result.get("overall_score", 0),
+            "is_smart": result.get("is_smart", False),
+            "tokens_input": usage.prompt_tokens,
+            "tokens_output": usage.completion_tokens,
+            "tokens_total": usage.total_tokens
+        })
+        increment_user_counter(user_id, "total_smart_tokens", usage.total_tokens)
+
+        # Cache result
+        set_to_cache(cache_key, result, ttl=86400)  # 24 hours
+
+        logger.info(f"SMART analysis for goal: {request.goal_title}, score: {result.get('overall_score', 0)}")
+        return result
+
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error: {e}, raw response: {raw}")
+        raise HTTPException(status_code=500, detail="Failed to parse LLM response")
+    except Exception as e:
+        logger.error(f"Error analyzing SMART: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
