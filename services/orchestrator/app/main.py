@@ -575,15 +575,16 @@ async def handle_scheduling_flow(user_id: str, message: str, current_state: str,
             message_lower = message.lower()
 
             if "через" in message_lower:
+                # Try to extract number, default to 1 if not found
+                number_match = re.search(r'\d+', message)
+                number = int(number_match.group()) if number_match else 1
+
                 if "день" in message_lower or "дня" in message_lower or "дней" in message_lower:
-                    days = int(re.search(r'\d+', message).group())
-                    deadline = (datetime.now() + timedelta(days=days)).date().isoformat()
+                    deadline = (datetime.now() + timedelta(days=number)).date().isoformat()
                 elif "недел" in message_lower:
-                    weeks = int(re.search(r'\d+', message).group())
-                    deadline = (datetime.now() + timedelta(weeks=weeks)).date().isoformat()
+                    deadline = (datetime.now() + timedelta(weeks=number)).date().isoformat()
                 elif "месяц" in message_lower:
-                    months = int(re.search(r'\d+', message).group())
-                    deadline = (datetime.now() + timedelta(days=months*30)).date().isoformat()
+                    deadline = (datetime.now() + timedelta(days=number*30)).date().isoformat()
             else:
                 # Try to parse absolute date
                 from dateutil import parser as dtparser
@@ -608,6 +609,18 @@ async def handle_scheduling_flow(user_id: str, message: str, current_state: str,
                 response_type="text",
                 text="Произошла ошибка. Давай начнём заново."
             )
+
+        # Update goal with deadline in database
+        try:
+            update_response = http_client.patch(
+                f"{CORE_SERVICE_URL}/api/goals/{goal_id}",
+                params={"user_id": user_id},
+                json={"target_date": deadline}
+            )
+            if update_response.status_code != 200:
+                logger.error(f"[{user_id}] Failed to update goal deadline: {update_response.status_code}")
+        except Exception as e:
+            logger.exception(f"[{user_id}] Error updating goal deadline: {e}")
 
         # Check feasibility
         try:
@@ -698,6 +711,311 @@ async def process_message(request: ProcessMessageRequest):
 
         logger.info(f"[{user_id}] Current state: {current_state}")
 
+        # Handle goal clarification state - user provides goal title
+        if current_state == "goal_clarification":
+            logger.info(f"[{user_id}] Received goal title: {message}")
+
+            # Transition to time commitment question
+            await update_session_state(user_id, DialogState.GOAL_TIME_COMMITMENT, {
+                "goal_title": message.strip()
+            })
+
+            # Ask about time commitment
+            time_text = (
+                f"👍 Отлично! Цель: <b>{message.strip()}</b>\n\n"
+                "⏰ Сколько времени в день ты готов выделять на достижение этой цели?\n\n"
+                "Например:\n"
+                "• 30 минут\n"
+                "• 1 час\n"
+                "• 2 часа"
+            )
+
+            await update_conversation(user_id, "user", message)
+            await update_conversation(user_id, "assistant", time_text)
+
+            return ProcessMessageResponse(
+                success=True,
+                response_type="text",
+                text=time_text
+            )
+
+        # Handle goal time commitment state - user provides time commitment
+        if current_state == "goal_time_commitment":
+            logger.info(f"[{user_id}] Received time commitment: {message}")
+
+            goal_title = session_context.get("goal_title", "")
+            if not goal_title:
+                error_text = "Ошибка: название цели не найдено. Начни заново с /start"
+                await update_session_state(user_id, DialogState.IDLE, {})
+                return ProcessMessageResponse(
+                    success=False,
+                    response_type="text",
+                    text=error_text
+                )
+
+            # Parse time commitment (simple parsing)
+            import re
+            time_commitment = message.strip()
+
+            # Generate steps using LLM
+            try:
+                logger.info(f"[{user_id}] Generating steps for goal: {goal_title}, time: {time_commitment}")
+
+                # Call LLM to generate steps
+                llm_response = http_client.post(
+                    f"{LLM_SERVICE_URL}/api/generate-steps",
+                    json={
+                        "goal_title": goal_title,
+                        "time_commitment": time_commitment,
+                        "additional_context": f"Пользователь готов выделять {time_commitment} в день"
+                    }
+                )
+
+                if llm_response.status_code != 200:
+                    raise Exception("Failed to generate steps")
+
+                generated_steps = llm_response.json()
+                logger.info(f"[{user_id}] Generated {len(generated_steps)} steps")
+
+                # Add order field to each step
+                for i, step in enumerate(generated_steps, 1):
+                    step["order"] = i
+
+                # Create goal with generated steps
+                response = http_client.post(
+                    f"{CORE_SERVICE_URL}/api/goals",
+                    json={
+                        "user_id": user_id,
+                        "title": goal_title,
+                        "description": f"Время в день: {time_commitment}",
+                        "status": "active",
+                        "steps": generated_steps
+                    }
+                )
+
+                if response.status_code != 201:
+                    logger.error(f"[{user_id}] Failed to create goal: {response.status_code}, {response.text}")
+                    raise Exception(f"Failed to create goal: {response.text}")
+
+                core_result = response.json()
+
+                if core_result.get("id"):
+                    # Goal created successfully, now analyze SMART
+                    logger.info(f"[{user_id}] Goal created with ID: {core_result['id']}")
+
+                    # Analyze goal with SMART criteria
+                    smart_analysis = None
+                    try:
+                        logger.info(f"[{user_id}] Analyzing SMART for goal: {goal_title}")
+                        smart_response = http_client.post(
+                            f"{LLM_SERVICE_URL}/api/analyze-smart",
+                            json={
+                                "goal_title": goal_title,
+                                "description": core_result.get("description"),
+                                "target_date": core_result.get("target_date"),
+                                "steps": core_result.get("steps", [])
+                            }
+                        )
+
+                        if smart_response.status_code == 200:
+                            smart_analysis = smart_response.json()
+                            logger.info(f"[{user_id}] SMART score: {smart_analysis.get('overall_score')}/10, is_smart: {smart_analysis.get('is_smart')}")
+                        else:
+                            logger.warning(f"[{user_id}] SMART analysis failed: {smart_response.status_code}")
+                    except Exception as e:
+                        logger.error(f"[{user_id}] Error analyzing SMART: {e}")
+                        # Continue without SMART analysis if it fails
+
+                    # Update session state with SMART analysis
+                    await update_session_state(user_id, DialogState.GOAL_DEADLINE_REQUEST, {
+                        "goal_id": core_result["id"],
+                        "goal_title": core_result.get("title", ""),
+                        "time_commitment": time_commitment,
+                        "smart_analysis": smart_analysis
+                    })
+
+                    # Build response with SMART feedback
+                    goal_text = f"🎯 Отлично! Я создал цель: <b>{core_result.get('title')}</b>\n\n"
+                    steps = core_result.get("steps", [])
+                    if steps:
+                        goal_text += f"📋 Создано {len(steps)} шагов:\n"
+                        for i, step in enumerate(steps[:3], 1):
+                            goal_text += f"{i}. {step['title']}\n"
+                        if len(steps) > 3:
+                            goal_text += f"... и ещё {len(steps) - 3}\n"
+                        goal_text += "\n"
+
+                    # Add SMART analysis feedback
+                    if smart_analysis:
+                        goal_text += f"📊 <b>SMART-анализ</b> (оценка: {smart_analysis.get('overall_score', 0)}/10)\n\n"
+
+                        criteria = smart_analysis.get("criteria", {})
+                        for key, data in criteria.items():
+                            emoji = "✅" if data.get("passed") else "⚠️"
+                            goal_text += f"{emoji} <b>{key.upper()}</b>: {data.get('feedback', '')}\n"
+
+                        goal_text += f"\n💬 {smart_analysis.get('motivational_message', '')}\n\n"
+
+                    goal_text += "📅 <b>Когда ты хочешь достичь этой цели?</b>\n"
+                    goal_text += "Укажи дедлайн, например:\n"
+                    goal_text += "• 'через 2 недели'\n"
+                    goal_text += "• '15 декабря'\n"
+                    goal_text += "• '2025-12-15'"
+
+                    # Add button to edit goal if not SMART
+                    buttons = None
+                    if smart_analysis and not smart_analysis.get("is_smart"):
+                        buttons = [
+                            [{"text": "✏️ Изменить постановку цели", "callback_data": f"edit_goal_{core_result['id']}"}],
+                            [{"text": "➡️ Продолжить с текущей целью", "callback_data": "continue_goal"}]
+                        ]
+
+                    # Update conversation
+                    await update_conversation(user_id, "user", message)
+                    await update_conversation(user_id, "assistant", goal_text)
+
+                    return ProcessMessageResponse(
+                        success=True,
+                        response_type="text",
+                        text=goal_text,
+                        buttons=buttons
+                    )
+                else:
+                    # Goal creation failed
+                    error_text = "Не удалось создать цель. Попробуй еще раз."
+                    await update_conversation(user_id, "user", message)
+                    await update_conversation(user_id, "assistant", error_text)
+                    await update_session_state(user_id, DialogState.IDLE, {})
+                    return ProcessMessageResponse(
+                        success=False,
+                        response_type="text",
+                        text=error_text
+                    )
+            except Exception as e:
+                logger.error(f"[{user_id}] Error creating goal: {e}")
+                error_text = "Произошла ошибка при создании цели. Попробуй еще раз."
+                await update_conversation(user_id, "user", message)
+                await update_conversation(user_id, "assistant", error_text)
+                await update_session_state(user_id, DialogState.IDLE, {})
+                return ProcessMessageResponse(
+                    success=False,
+                    response_type="text",
+                    text=error_text
+                )
+
+        # Handle goal editing state - user provides new goal formulation
+        if current_state == "goal_editing":
+            logger.info(f"[{user_id}] Received new goal formulation: {message}")
+
+            goal_id = session_context.get("goal_id")
+            if not goal_id:
+                error_text = "Ошибка: цель не найдена. Начни заново с /start"
+                await update_session_state(user_id, DialogState.IDLE, {})
+                return ProcessMessageResponse(
+                    success=False,
+                    response_type="text",
+                    text=error_text
+                )
+
+            new_title = message.strip()
+
+            try:
+                # Update goal title
+                logger.info(f"[{user_id}] Updating goal {goal_id} with new title: {new_title}")
+
+                response = http_client.put(
+                    f"{CORE_SERVICE_URL}/api/goals/{goal_id}",
+                    json={
+                        "user_id": user_id,
+                        "title": new_title
+                    }
+                )
+
+                if response.status_code != 200:
+                    raise Exception(f"Failed to update goal: {response.text}")
+
+                updated_goal = response.json()
+
+                # Re-analyze with SMART
+                logger.info(f"[{user_id}] Re-analyzing SMART for updated goal")
+                smart_response = http_client.post(
+                    f"{LLM_SERVICE_URL}/api/analyze-smart",
+                    json={
+                        "goal_title": new_title,
+                        "description": updated_goal.get("description"),
+                        "target_date": updated_goal.get("target_date"),
+                        "steps": updated_goal.get("steps", [])
+                    }
+                )
+
+                if smart_response.status_code != 200:
+                    raise Exception("Failed to analyze SMART")
+
+                smart_analysis = smart_response.json()
+                logger.info(f"[{user_id}] SMART score: {smart_analysis.get('overall_score')}/10, is_smart: {smart_analysis.get('is_smart')}")
+
+                # Build response with SMART feedback
+                goal_text = f"✏️ <b>Цель обновлена!</b>\n\n"
+                goal_text += f"🎯 Новая формулировка: <b>{new_title}</b>\n\n"
+
+                goal_text += f"📊 <b>SMART-анализ</b> (оценка: {smart_analysis.get('overall_score', 0)}/10)\n\n"
+
+                criteria = smart_analysis.get("criteria", {})
+                for key, data in criteria.items():
+                    emoji = "✅" if data.get("passed") else "⚠️"
+                    goal_text += f"{emoji} <b>{key.upper()}</b>: {data.get('feedback', '')}\n"
+
+                goal_text += f"\n💬 {smart_analysis.get('motivational_message', '')}\n\n"
+
+                # Check if goal is now SMART
+                if smart_analysis.get("is_smart"):
+                    # Goal is SMART, proceed to deadline request
+                    await update_session_state(user_id, DialogState.GOAL_DEADLINE_REQUEST, {
+                        "goal_id": goal_id,
+                        "goal_title": new_title,
+                        "smart_analysis": smart_analysis
+                    })
+
+                    goal_text += "📅 <b>Теперь укажи дедлайн для достижения цели.</b>\n"
+                    goal_text += "Например:\n"
+                    goal_text += "• 'через 2 недели'\n"
+                    goal_text += "• '15 декабря'\n"
+                    goal_text += "• '2025-12-15'"
+
+                    buttons = None
+                else:
+                    # Still not SMART, offer to edit again
+                    await update_session_state(user_id, "goal_editing", {
+                        "goal_id": goal_id,
+                        "smart_analysis": smart_analysis
+                    })
+
+                    goal_text += "💡 <b>Цель можно улучшить.</b> Попробуй снова или продолжи с текущей формулировкой."
+
+                    buttons = [
+                        [{"text": "✏️ Улучшить формулировку", "callback_data": f"edit_goal_{goal_id}"}],
+                        [{"text": "➡️ Продолжить с текущей целью", "callback_data": "continue_to_deadline"}]
+                    ]
+
+                await update_conversation(user_id, "user", message)
+                await update_conversation(user_id, "assistant", goal_text)
+
+                return ProcessMessageResponse(
+                    success=True,
+                    response_type="text",
+                    text=goal_text,
+                    buttons=buttons
+                )
+
+            except Exception as e:
+                logger.error(f"[{user_id}] Error updating goal: {e}")
+                error_text = "Произошла ошибка при обновлении цели. Попробуй еще раз."
+                return ProcessMessageResponse(
+                    success=False,
+                    response_type="text",
+                    text=error_text
+                )
+
         # Handle scheduling flow states first
         scheduling_response = await handle_scheduling_flow(user_id, message, current_state, session_context)
         if scheduling_response:
@@ -761,8 +1079,8 @@ async def process_message(request: ProcessMessageRequest):
             # Return special response asking for deadline
             await update_conversation(user_id, "user", message)
 
-            # Build goal summary text
-            goal_text = f"🎯 Отлично! Я создал цель: *{core_result.get('title')}*\n\n"
+            # Build goal summary text (HTML formatting for Telegram)
+            goal_text = f"🎯 Отлично! Я создал цель: <b>{core_result.get('title')}</b>\n\n"
             steps = core_result.get("steps", [])
             if steps:
                 goal_text += f"📋 Создано {len(steps)} шагов:\n"
@@ -772,7 +1090,7 @@ async def process_message(request: ProcessMessageRequest):
                     goal_text += f"... и ещё {len(steps) - 3}\n"
                 goal_text += "\n"
 
-            goal_text += "📅 *Когда ты хочешь достичь этой цели?*\n"
+            goal_text += "📅 <b>Когда ты хочешь достичь этой цели?</b>\n"
             goal_text += "Укажи дедлайн, например:\n"
             goal_text += "• 'через 2 недели'\n"
             goal_text += "• '15 декабря'\n"
@@ -877,7 +1195,7 @@ async def process_callback(request: ProcessCallbackRequest):
             }
             await update_session_state(user_id, DialogState.GOAL_SCHEDULE_TIME_PREF, new_context)
 
-            text = "⏰ *Когда тебе удобнее работать над целью?*\n(можно выбрать несколько)"
+            text = "⏰ <b>Когда тебе удобнее работать над целью?</b>\n(можно выбрать несколько)"
             buttons = [
                 {"text": "🌅 Утро (9-12)", "callback": f"time_pref:morning:{goal_id}"},
                 {"text": "☀️ День (12-18)", "callback": f"time_pref:afternoon:{goal_id}"},
@@ -929,7 +1247,7 @@ async def process_callback(request: ProcessCallbackRequest):
                 "evening": "🌙 Вечер"
             }
             selected = ", ".join([time_names[t] for t in preferred_times]) if preferred_times else "не выбрано"
-            text = f"⏰ *Когда тебе удобнее работать над целью?*\n(можно выбрать несколько)\n\nВыбрано: {selected}"
+            text = f"⏰ <b>Когда тебе удобнее работать над целью?</b>\n(можно выбрать несколько)\n\nВыбрано: {selected}"
 
             buttons = [
                 {"text": f"{'✅ ' if 'morning' in preferred_times else ''}🌅 Утро (9-12)", "callback": f"time_pref:morning:{goal_id}"},
@@ -960,7 +1278,7 @@ async def process_callback(request: ProcessCallbackRequest):
             # Transition to days selection
             await update_session_state(user_id, DialogState.GOAL_SCHEDULE_DAYS_PREF, session_context)
 
-            text = "📅 *В какие дни недели тебе удобно?*\n(можно выбрать несколько)"
+            text = "📅 <b>В какие дни недели тебе удобно?</b>\n(можно выбрать несколько)"
             buttons = [
                 {"text": "Пн", "callback": f"day_pref:mon:{goal_id}"},
                 {"text": "Вт", "callback": f"day_pref:tue:{goal_id}"},
@@ -999,7 +1317,7 @@ async def process_callback(request: ProcessCallbackRequest):
 
             # Show updated selection
             selected = ", ".join(preferred_days) if preferred_days else "не выбрано"
-            text = f"📅 *В какие дни недели тебе удобно?*\n(можно выбрать несколько)\n\nВыбрано: {selected}"
+            text = f"📅 <b>В какие дни недели тебе удобно?</b>\n(можно выбрать несколько)\n\nВыбрано: {selected}"
 
             day_buttons = []
             for d in ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]:
@@ -1057,7 +1375,8 @@ async def process_callback(request: ProcessCallbackRequest):
                     "duration_minutes": 120
                 }
             )
-            free_slots = slots_response.json()
+            free_slots_data = slots_response.json()
+            free_slots = free_slots_data.get("slots", [])
 
             # Generate schedule via LLM
             logger.info(f"[{user_id}] Generating schedule for goal {goal_id}")
@@ -1077,6 +1396,17 @@ async def process_callback(request: ProcessCallbackRequest):
             )
             schedule_plan = schedule_response.json()
 
+            # Handle both list and dict responses
+            if isinstance(schedule_plan, dict):
+                # LLM returned error or reason
+                await update_session_state(user_id, DialogState.IDLE, {})
+                reason = schedule_plan.get("reason", "Не удалось создать расписание")
+                return ProcessMessageResponse(
+                    success=False,
+                    response_type="text",
+                    text=f"К сожалению, {reason}. Попробуй изменить дедлайн или выбрать больше дней. 😔"
+                )
+
             if not schedule_plan or len(schedule_plan) == 0:
                 await update_session_state(user_id, DialogState.IDLE, {})
                 return ProcessMessageResponse(
@@ -1093,7 +1423,7 @@ async def process_callback(request: ProcessCallbackRequest):
             await update_session_state(user_id, DialogState.GOAL_SCHEDULE_CONFIRM, new_context)
 
             # Format schedule preview
-            text = "📋 *Вот твоё расписание:*\n\n"
+            text = "📋 <b>Вот твоё расписание:</b>\n\n"
             for item in schedule_plan[:10]:
                 step_id = item["step_id"]
                 step = next((s for s in goal["steps"] if s["id"] == step_id), None)

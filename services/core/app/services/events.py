@@ -26,7 +26,10 @@ def create_event(
     date: str,
     time: Optional[str] = None,
     repeat: Optional[str] = None,
-    notes: Optional[str] = None
+    notes: Optional[str] = None,
+    event_type: Optional[str] = "user",
+    linked_step_id: Optional[int] = None,
+    linked_goal_id: Optional[int] = None
 ) -> Dict[str, Any]:
     """Create a new event"""
     event = Event(
@@ -36,6 +39,9 @@ def create_event(
         time=parse_time(time),
         repeat=repeat,
         notes=notes,
+        event_type=event_type,
+        linked_step_id=linked_step_id,
+        linked_goal_id=linked_goal_id,
     )
     session.add(event)
     session.flush()

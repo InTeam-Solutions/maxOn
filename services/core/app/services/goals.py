@@ -271,6 +271,9 @@ def schedule_steps(
     """
     from app.models.event import Event
     from datetime import time as time_type
+    import logging
+
+    logger = logging.getLogger("core_service")
 
     # Verify goal ownership
     goal = session.query(Goal).filter(
@@ -281,6 +284,7 @@ def schedule_steps(
     if not goal:
         return {"error": "Goal not found"}
 
+    logger.info(f"Scheduling {len(schedule_plan)} steps for goal {goal_id}, create_events={create_calendar_events}")
     created_events = []
 
     for plan_item in schedule_plan:
@@ -295,7 +299,10 @@ def schedule_steps(
         ).first()
 
         if not step:
+            logger.warning(f"Step {step_id} not found for goal {goal_id}")
             continue
+
+        logger.info(f"Processing step {step_id}: {step.title}, date={planned_date_str}, time={planned_time_str}")
 
         # Update step scheduling fields
         if planned_date_str:
@@ -318,11 +325,14 @@ def schedule_steps(
             event_title = f"{step.title}"
             event_notes = f"Шаг {step.order} для цели: {goal.title}"
 
+            logger.info(f"Creating calendar event for step {step_id}: {event_title} on {step.planned_date}")
+
             event = Event(
                 user_id=user_id,
                 title=event_title,
                 date=step.planned_date,
                 time=step.planned_time,
+                duration_minutes=step.duration_minutes,
                 notes=event_notes,
                 event_type="goal_step",
                 linked_step_id=step.id,
@@ -336,6 +346,9 @@ def schedule_steps(
             session.flush()
 
             created_events.append(event.to_dict())
+            logger.info(f"Event created with ID {event.id}")
+        else:
+            logger.warning(f"Event not created for step {step_id}: create_calendar_events={create_calendar_events}, has_date={step.planned_date is not None}")
 
     # Mark goal as scheduled
     goal.is_scheduled = True
@@ -343,6 +356,7 @@ def schedule_steps(
 
     result = goal.to_dict()
     result["created_events"] = created_events
+    logger.info(f"Scheduled goal {goal_id}: created {len(created_events)} events")
 
     return result
 
