@@ -1,0 +1,62 @@
+.card {
+  width: 100%;
+  text-align: left;
+  background: var(--bg-elevated);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 18px;
+  padding: 18px;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card.active {
+  border-color: var(--accent-blue);
+  box-shadow: 0 8px 24px rgba(30, 64, 175, 0.25);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.deadline {
+  color: var(--accent-green);
+  font-size: 13px;
+}
+
+.description {
+  color: var(--text-secondary);
+}
+
+.progressRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.progressRow > span {
+  min-width: 40px;
+  text-align: right;
+}
+
+.progressValue {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.meta {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.status {
+  color: var(--accent-blue);
+}
+

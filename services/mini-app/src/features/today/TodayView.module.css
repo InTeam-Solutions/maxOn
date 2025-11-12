@@ -1,0 +1,118 @@
+.today {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+}
+
+.headingGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.title {
+  display: block;
+}
+
+.subtitle {
+  color: var(--text-secondary);
+  display: block;
+  margin-top: 4px;
+}
+
+.fireEmoji {
+  font-size: 24px;
+}
+
+.miniCalendar {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16px;
+  gap: 8px;
+}
+
+.calendarDay {
+  flex: 1;
+  text-align: center;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-soft);
+  padding: 8px 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.calendarDay.active {
+  border-color: var(--accent-blue);
+  color: var(--text-primary);
+}
+
+.calendarWeekday {
+  display: block;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.calendarDate {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.calendarDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  display: block;
+  margin: 6px auto 0;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.placeholder {
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+}
+
+.actionsRow {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.gradientButton {
+  background-image: var(--gradient-cta);
+  border: none;
+}
+
+.promptBox {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  background: var(--bg-soft);
+  border-radius: 20px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+@media (max-width: 600px) {
+  .miniCalendar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+
+  .promptBox {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

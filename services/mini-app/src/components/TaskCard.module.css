@@ -1,0 +1,67 @@
+.card {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: var(--bg-elevated);
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.card:hover {
+  border-color: rgba(37, 99, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.badge {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.badge.green {
+  color: var(--accent-green);
+}
+
+.badge.blue {
+  color: var(--accent-blue);
+}
+
+.badge.violet {
+  color: var(--accent-violet);
+}
+
+.goal {
+  color: var(--text-secondary);
+}
+
+.meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.date {
+  color: var(--text-secondary);
+}
+
+.label {
+  color: var(--text-muted);
+}
+

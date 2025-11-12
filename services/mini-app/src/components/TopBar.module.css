@@ -1,0 +1,38 @@
+.topBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0 16px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logoMark {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-image: var(--gradient-cta);
+  box-shadow: 0 0 20px rgba(37, 99, 255, 0.4);
+}
+
+.brandText {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.sectionLabel {
+  color: var(--text-secondary);
+}
+
+.iconButton {
+  color: var(--text-secondary);
+  font-size: 20px;
+}
+

@@ -1,0 +1,155 @@
+.chatPanel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-elevated);
+  border-radius: 20px;
+  padding: 16px;
+  gap: 12px;
+}
+
+.chatHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chatTitle {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.chatSubtitle {
+  color: var(--text-secondary);
+}
+
+.closeButton {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 4px;
+}
+
+.bubble {
+  max-width: 80%;
+  padding: 12px;
+  border-radius: 16px;
+  position: relative;
+}
+
+.userBubble {
+  align-self: flex-end;
+  background: var(--accent-blue);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.botBubble {
+  align-self: flex-start;
+  background: var(--bg-soft);
+  border-bottom-left-radius: 4px;
+}
+
+.attachments {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.attachment {
+  background: rgba(2, 4, 11, 0.4);
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.attachmentLabel {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.attachmentTitle {
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.attachmentMeta {
+  color: var(--text-secondary);
+}
+
+.time {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+  margin-top: 6px;
+}
+
+.composer {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.messageInput {
+  flex: 1;
+}
+
+.sendButton {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background-image: var(--gradient-cta);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.sendButton:active {
+  transform: scale(0.95);
+}
+
+.sendButtonDisabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sendIcon {
+  font-size: 16px;
+  transform: translateX(1px);
+}
+
+.loader {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 600px) {
+  .bubble {
+    max-width: 100%;
+  }
+}
