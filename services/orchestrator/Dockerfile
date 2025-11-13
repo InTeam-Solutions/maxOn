@@ -12,5 +12,12 @@ COPY shared /app/shared
 # Copy service code
 COPY services/orchestrator/app /app/app
 
-# Run
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
+# Copy entrypoint script
+COPY services/orchestrator/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+# Expose port (default 8001, but can be overridden by $PORT env var)
+EXPOSE 8001
+
+# Run the service (Railway will inject $PORT)
+ENTRYPOINT ["/app/entrypoint.sh"]
