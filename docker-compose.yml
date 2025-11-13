@@ -185,6 +185,31 @@ services:
     volumes:
       - ./shared:/app/shared:ro
 
+  calendar:
+    build:
+      context: .
+      dockerfile: services/calendar/Dockerfile
+    image: ghcr.io/0stg0t/initio-calendar:latest
+    container_name: initio_calendar
+    env_file:
+      - .env
+    environment:
+      APP_HOST: ${CALENDAR_APP_HOST}
+      APP_PORT: ${CALENDAR_APP_PORT}
+      DATABASE_URL: ${CALENDAR_DATABASE_URL}
+      PUBLIC_BASE_URL: ${CALENDAR_PUBLIC_BASE_URL}
+      ICS_PAST_DAYS: ${CALENDAR_ICS_PAST_DAYS}
+      ICS_FUTURE_DAYS: ${CALENDAR_ICS_FUTURE_DAYS}
+      ICS_CACHE_SECONDS: ${CALENDAR_ICS_CACHE_SECONDS}
+    ports:
+      - "7132:7132"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - initio_network
+
 volumes:
   postgres_data:
   redis_data:
