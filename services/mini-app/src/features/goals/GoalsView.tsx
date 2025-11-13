@@ -1,34 +1,108 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Typography } from '@maxhub/max-ui';
 import { mockGoals } from '../../mocks/data';
 import { useAppState } from '../../store/AppStateContext';
 import { GoalCard } from '../../components/GoalCard';
 import { GoalDetails } from './GoalDetails';
+import { apiClient } from '../../services/api';
+import type { Goal } from '../../types/domain';
 import styles from './GoalsView.module.css';
+
+const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
 
 export const GoalsView = () => {
   const { selectedGoalId, selectGoal } = useAppState();
-  const currentGoal = mockGoals.find((goal) => goal.id === selectedGoalId) ?? mockGoals[0];
+  const [goals, setGoals] = useState<Goal[]>(mockGoals);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const currentGoal = goals.find((goal) => goal.id === selectedGoalId) ?? goals[0];
 
   useEffect(() => {
-    if (!selectedGoalId && mockGoals[0]) {
-      selectGoal(mockGoals[0].id);
+    if (USE_REAL_API) {
+      loadGoals();
     }
-  }, [selectedGoalId, selectGoal]);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedGoalId && goals[0]) {
+      selectGoal(goals[0].id);
+    }
+  }, [selectedGoalId, selectGoal, goals]);
+
+  const loadGoals = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await apiClient.getGoals();
+
+      // Transform API response to match UI format
+      const transformedGoals: Goal[] = data.map((g: any) => ({
+        id: String(g.id),
+        title: g.title,
+        description: g.description || '',
+        targetDate: g.target_date || new Date().toISOString(),
+        progress: calculateProgress(g.steps || []),
+        category: g.category || 'Общее',
+        priority: g.priority || 'medium',
+        status: g.status || 'active',
+        steps: (g.steps || []).map((s: any) => ({
+          id: String(s.id),
+          title: s.title,
+          completed: s.status === 'completed'
+        }))
+      }));
+
+      setGoals(transformedGoals.length > 0 ? transformedGoals : mockGoals);
+      console.log('[GoalsView] Loaded goals:', transformedGoals);
+    } catch (err) {
+      console.error('[GoalsView] Failed to load goals:', err);
+      setError('Не удалось загрузить цели');
+      // Fallback to mock data
+      setGoals(mockGoals);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const calculateProgress = (steps: any[]): number => {
+    if (!steps || steps.length === 0) return 0;
+    const completed = steps.filter(s => s.status === 'completed').length;
+    return Math.round((completed / steps.length) * 100);
+  };
+
+  // Check if user_id is from URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const userIdFromUrl = urlParams.get('user_id');
 
   return (
     <div className={styles.goalsPage}>
       <div>
         <Typography.Title variant="medium-strong">
-          Цели
+          Цели {USE_REAL_API && '(Live Data)'}
         </Typography.Title>
         <Typography.Body variant="small" className={styles.subtitle}>
-          Управляй прогрессом и отмечай шаги
+          {loading ? 'Загрузка...' : error ? error : 'Управляй прогрессом и отмечай шаги'}
         </Typography.Body>
+        {userIdFromUrl && !USE_REAL_API && (
+          <div style={{
+            background: 'rgba(59, 130, 246, 0.1)',
+            border: '1px solid rgba(59, 130, 246, 0.3)',
+            borderRadius: '8px',
+            padding: '12px',
+            marginTop: '12px',
+            fontSize: '14px',
+            color: '#94a3b8'
+          }}>
+            💡 Открыто для User ID: <code style={{color: '#3b82f6'}}>{userIdFromUrl}</code>
+            <br/>
+            <span style={{fontSize: '12px'}}>Сейчас показываются демо-данные. Для просмотра ваших целей нужно задеплоить бэкенд.</span>
+          </div>
+        )}
       </div>
       <div className={styles.columns}>
         <div className={styles.list}>
-          {mockGoals.map((goal) => (
+          {goals.map((goal) => (
             <GoalCard
               key={goal.id}
               goal={goal}
