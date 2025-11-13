@@ -18,6 +18,10 @@ COPY shared/ /app/shared/
 # Copy service code
 COPY services/core/app/ /app/app/
 
+# Copy entrypoint script
+COPY services/core/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Expose port (default 8004, but can be overridden by $PORT env var)
 EXPOSE 8004
 
@@ -26,4 +30,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD python -c "import httpx; httpx.get('http://localhost:8004/health')"
 
 # Run the service (Railway will inject $PORT)
-CMD python -c "import os; import uvicorn; uvicorn.run('app.main:app', host='0.0.0.0', port=int(os.getenv('PORT', 8004)))"
+ENTRYPOINT ["/app/entrypoint.sh"]
