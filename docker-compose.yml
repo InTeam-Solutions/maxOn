@@ -233,5 +233,5 @@ volumes:
   redis_data:
 
 networks:
-  maxon_network:
+  maxon_network:f01875c ([ADD] mini-app in docker-compose)
     driver: bridge
