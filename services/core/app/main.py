@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional
@@ -19,9 +20,18 @@ from app.services import users as users_service
 
 # Setup
 app = FastAPI(
-    title="Initio Core Service",
+    title="MaxOn Core Service",
     description="Business logic for Events, Goals, Products, and Cart",
     version="0.1.0"
+)
+
+# CORS middleware for mini-app
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify exact origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 logger = setup_logger("core_service", level=os.getenv("LOG_LEVEL", "INFO"))

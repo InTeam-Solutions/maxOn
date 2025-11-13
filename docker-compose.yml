@@ -211,6 +211,20 @@ services:
     networks:
       - maxon_network
 
+  mini-app:
+    build:
+      context: services/mini-app
+      dockerfile: Dockerfile
+      args:
+        VITE_MAX_WEB_APP_SRC: ${VITE_MAX_WEB_APP_SRC:-https://static.maxhub.com/sdk/max-web-app.js}
+    image: ghcr.io/0stg0t/maxon-mini-app:latest
+    container_name: maxon_mini_app
+    ports:
+      - "5173:80"
+    restart: unless-stopped
+    networks:
+      - maxon_network
+
 volumes:
   postgres_data:
   redis_data:

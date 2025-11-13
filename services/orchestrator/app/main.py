@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 import logging
@@ -11,9 +12,18 @@ import httpx
 
 # Setup
 app = FastAPI(
-    title="Initio Orchestrator",
+    title="MaxOn Orchestrator",
     description="Service coordination and state machine",
     version="0.1.0"
+)
+
+# CORS middleware for mini-app
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify exact origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 logger = setup_logger("orchestrator", level=os.getenv("LOG_LEVEL", "INFO"))

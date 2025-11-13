@@ -313,6 +313,22 @@ async def cmd_events(event: MessageCreated):
     await show_events_for_user(event.message.recipient.chat_id, str(event.message.sender.user_id), event.message.bot)
 
 
+@dp.message_created(Command("webapp"))
+async def cmd_webapp(event: MessageCreated):
+    """Send link to open WebApp in browser with user_id"""
+    user_id = str(event.message.sender.user_id)
+    webapp_url = f"https://mini-app-alpha-fawn.vercel.app?user_id={user_id}"
+
+    message_text = (
+        "🚀 <b>MaxOn Web App</b>\n\n"
+        "Открой приложение в браузере для удобного управления целями и событиями!\n\n"
+        f"👉 <a href=\"{webapp_url}\">Открыть приложение</a>\n\n"
+        f"<code>User ID: {user_id}</code>"
+    )
+
+    await event.message.answer(message_text)
+
+
 @dp.message_callback(F.callback.payload == "show_goals")
 async def callback_show_goals(callback: MessageCallback):
     user_id = str(callback.callback.user.user_id)
@@ -930,6 +946,7 @@ async def on_startup():
         BotCommand(name="/start", description="🏠 Главное меню"),
         BotCommand(name="/goals", description="🎯 Мои цели"),
         BotCommand(name="/events", description="📅 Календарь событий"),
+        BotCommand(name="/webapp", description="🚀 Открыть Web App"),
     ]
     await bot.set_my_commands(*commands)
     logger.info("✅ Bot commands menu set")
