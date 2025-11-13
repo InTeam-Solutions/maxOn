@@ -8,7 +8,7 @@ import { apiClient } from '../../services/api';
 import type { Goal } from '../../types/domain';
 import styles from './GoalsView.module.css';
 
-const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
+const USE_REAL_API = true; // Force real API in production
 
 export const GoalsView = () => {
   const { selectedGoalId, selectGoal } = useAppState();
