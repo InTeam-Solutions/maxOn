@@ -9,14 +9,14 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
-COPY requirements.txt .
+COPY services/core/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy shared library (symlink in services/core/shared -> ../../shared)
+# Copy shared library
 COPY shared/ /app/shared/
 
 # Copy service code
-COPY app/ /app/app/
+COPY services/core/app/ /app/app/
 
 # Expose port (default 8004, but can be overridden by $PORT env var)
 EXPOSE 8004
