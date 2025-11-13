@@ -2,48 +2,48 @@ services:
   # ==================== Databases ====================
   postgres:
     image: postgres:16-alpine
-    container_name: initio_postgres
+    container_name: maxon_postgres
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-initio}
-      POSTGRES_USER: ${POSTGRES_USER:-initio}
+      POSTGRES_DB: ${POSTGRES_DB:-maxon}
+      POSTGRES_USER: ${POSTGRES_USER:-maxon}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-initio}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-maxon}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - initio_network
+      - maxon_network
 
   redis:
     image: redis:7-alpine
-    container_name: initio_redis
+    container_name: maxon_redis
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379"
+      - "6380:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
     networks:
-      - initio_network
+      - maxon_network
 
   # ==================== Application Services ====================
   core:
     build:
       context: .
       dockerfile: services/core/Dockerfile
-    image: ghcr.io/0stg0t/initio-core:latest
-    container_name: initio_core
+    image: ghcr.io/0stg0t/maxon-core:latest
+    container_name: maxon_core
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-initio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-initio}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-maxon}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-maxon}
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
@@ -52,10 +52,10 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "8004:8004"
+      - "8104:8004"
     restart: unless-stopped
     networks:
-      - initio_network
+      - maxon_network
     volumes:
       - ./shared:/app/shared:ro
 
@@ -63,10 +63,10 @@ services:
     build:
       context: .
       dockerfile: services/context/Dockerfile
-    image: ghcr.io/0stg0t/initio-context:latest
-    container_name: initio_context
+    image: ghcr.io/0stg0t/maxon-context:latest
+    container_name: maxon_context
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-initio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-initio}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-maxon}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-maxon}
       - REDIS_URL=redis://redis:6379/1
       - CORE_SERVICE_URL=http://core:8004
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -78,10 +78,10 @@ services:
       core:
         condition: service_started
     ports:
-      - "8002:8002"
+      - "8102:8002"
     restart: unless-stopped
     networks:
-      - initio_network
+      - maxon_network
     volumes:
       - ./shared:/app/shared:ro
 
@@ -89,8 +89,8 @@ services:
     build:
       context: .
       dockerfile: services/llm/Dockerfile
-    image: ghcr.io/0stg0t/initio-llm:latest
-    container_name: initio_llm
+    image: ghcr.io/0stg0t/maxon-llm:latest
+    container_name: maxon_llm
     env_file:
       - .env
     environment:
@@ -99,10 +99,10 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "8003:8003"
+      - "8103:8003"
     restart: unless-stopped
     networks:
-      - initio_network
+      - maxon_network
     volumes:
       - ./shared:/app/shared:ro
 
@@ -110,8 +110,8 @@ services:
     build:
       context: .
       dockerfile: services/orchestrator/Dockerfile
-    image: ghcr.io/0stg0t/initio-orchestrator:latest
-    container_name: initio_orchestrator
+    image: ghcr.io/0stg0t/maxon-orchestrator:latest
+    container_name: maxon_orchestrator
     env_file:
       - .env
     environment:
@@ -127,10 +127,10 @@ services:
       core:
         condition: service_started
     ports:
-      - "8001:8001"
+      - "8101:8001"
     restart: unless-stopped
     networks:
-      - initio_network
+      - maxon_network
     volumes:
       - ./shared:/app/shared:ro
 
@@ -138,11 +138,12 @@ services:
     build:
       context: .
       dockerfile: services/api-gateway/Dockerfile
-    image: ghcr.io/0stg0t/initio-api-gateway:latest
-    container_name: initio_api_gateway
+    image: ghcr.io/0stg0t/maxon-api-gateway:latest
+    container_name: maxon_api_gateway
     env_file:
       - .env
     environment:
+      - MAX_BOT_TOKEN=${MAX_BOT_TOKEN}
       - ORCHESTRATOR_URL=http://orchestrator:8001
       - CORE_SERVICE_URL=http://core:8004
     depends_on:
@@ -150,7 +151,7 @@ services:
         condition: service_started
     restart: unless-stopped
     networks:
-      - initio_network
+      - maxon_network
     volumes:
       - ./shared:/app/shared:ro
 
@@ -158,13 +159,13 @@ services:
     build:
       context: .
       dockerfile: services/worker/Dockerfile
-    image: ghcr.io/0stg0t/initio-worker:latest
-    container_name: initio_worker
+    image: ghcr.io/0stg0t/maxon-worker:latest
+    container_name: maxon_worker
     env_file:
       - .env
     environment:
       - PYTHONPATH=/app
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-initio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-initio}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-maxon}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-maxon}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_DB=4
@@ -178,10 +179,10 @@ services:
       core:
         condition: service_started
     ports:
-      - "8005:8005"
+      - "8105:8005"
     restart: unless-stopped
     networks:
-      - initio_network
+      - maxon_network
     volumes:
       - ./shared:/app/shared:ro
 
@@ -189,8 +190,8 @@ services:
     build:
       context: .
       dockerfile: services/calendar/Dockerfile
-    image: ghcr.io/0stg0t/initio-calendar:latest
-    container_name: initio_calendar
+    image: ghcr.io/0stg0t/maxon-calendar:latest
+    container_name: maxon_calendar
     env_file:
       - .env
     environment:
@@ -202,18 +203,18 @@ services:
       ICS_FUTURE_DAYS: ${CALENDAR_ICS_FUTURE_DAYS}
       ICS_CACHE_SECONDS: ${CALENDAR_ICS_CACHE_SECONDS}
     ports:
-      - "7132:7132"
+      - "7133:7132"
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - initio_network
+      - maxon_network
 
 volumes:
   postgres_data:
   redis_data:
 
 networks:
-  initio_network:
+  maxon_network:
     driver: bridge

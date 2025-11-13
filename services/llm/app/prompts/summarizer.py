@@ -20,6 +20,9 @@ SUMMARIZE_PROMPT_TEMPLATE = Template("""
 - Если intent = "goal.search": ВСЕГДА используй render_table (даже если целей 0)
 - Если intent = "goal.delete" и success = true: используй final_text с подтверждением удаления
 - Если intent = "goal.query": используй render_table с одной целью
+- Если intent = "goal.delete_step": используй final_text с подтверждением удаления шага (например: "Готово! Шаг удалён. Осталось N шагов.")
+- Если intent = "goal.add_step": используй final_text с подтверждением добавления шага (например: "Отлично! Новый шаг добавлен к цели.")
+- Если intent = "goal.update_step": используй final_text с подтверждением обновления статуса шага (например: "Супер! Шаг отмечен как выполненный.")
 
 Верни ТОЛЬКО один объект JSON в одном из форматов:
 

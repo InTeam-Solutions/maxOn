@@ -2,19 +2,28 @@
   width: 100%;
   text-align: left;
   background: var(--bg-elevated);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 18px;
-  padding: 18px;
+  border: var(--border-soft);
+  border-radius: var(--card-radius);
+  padding: clamp(16px, 2vw, 20px);
   color: inherit;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+  transition: all var(--transition-base);
+}
+
+.card:hover {
+  background: var(--bg-soft);
+  border-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .card.active {
   border-color: var(--accent-blue);
-  box-shadow: 0 8px 24px rgba(30, 64, 175, 0.25);
+  box-shadow: 0 0 0 1px var(--accent-blue), var(--shadow-lg);
+  background: var(--bg-soft);
 }
 
 .header {
@@ -26,11 +35,14 @@
 
 .deadline {
   color: var(--accent-green);
-  font-size: 13px;
+  font-size: clamp(12px, 1.5vw, 13px);
+  font-weight: 500;
 }
 
 .description {
   color: var(--text-secondary);
+  font-size: clamp(13px, 1.5vw, 14px);
+  line-height: 1.5;
 }
 
 .progressRow {

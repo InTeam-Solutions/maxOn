@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Button } from '@maxhub/max-ui';
 import { useAppState } from '../store/AppStateContext';
 import { useMediaQuery } from '../hooks/useMediaQuery';
@@ -22,6 +22,21 @@ export const AppShell = () => {
   const { activeTab, setActiveTab, isChatOpen, setChatOpen } = useAppState();
   const isDesktop = useMediaQuery('(min-width: 1024px)');
   const ActiveComponent = useMemo(() => TAB_COMPONENTS[activeTab], [activeTab]);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [displayTab, setDisplayTab] = useState(activeTab);
+
+  useEffect(() => {
+    if (activeTab !== displayTab) {
+      setIsTransitioning(true);
+      const timer = setTimeout(() => {
+        setDisplayTab(activeTab);
+        setIsTransitioning(false);
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab, displayTab]);
+
+  const CurrentComponent = TAB_COMPONENTS[displayTab];
 
   return (
     <div className={styles.appShell}>
@@ -29,8 +44,15 @@ export const AppShell = () => {
         <TopBar />
         <TabStrip activeTab={activeTab} onChange={setActiveTab} />
         <div className={styles.mainArea}>
-          <section className={styles.contentColumn}>
-            <ActiveComponent />
+          <section
+            className={styles.contentColumn}
+            style={{
+              opacity: isTransitioning ? 0 : 1,
+              transform: isTransitioning ? 'translateY(10px)' : 'translateY(0)',
+              transition: 'opacity 200ms ease-out, transform 200ms ease-out'
+            }}
+          >
+            <CurrentComponent />
           </section>
           {isDesktop ? (
             <aside className={styles.chatColumn}>

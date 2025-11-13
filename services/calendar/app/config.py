@@ -22,7 +22,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("CALENDAR_APP_PORT", "APP_PORT"),
     )
     database_url: str = Field(
-        default="postgresql+asyncpg://initio:initio@postgres:5432/initio",
+        default="postgresql+asyncpg://maxon:maxon@postgres:5432/maxon",
         validation_alias=AliasChoices("CALENDAR_DATABASE_URL", "DATABASE_URL"),
     )
     public_base_url: str = Field(

@@ -3,17 +3,19 @@
   text-align: left;
   border: none;
   background: var(--bg-elevated);
-  padding: 16px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: clamp(14px, 2vw, 18px);
+  border-radius: var(--card-radius);
+  border: var(--border-soft);
   color: inherit;
   cursor: pointer;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .card:hover {
-  border-color: rgba(37, 99, 255, 0.5);
-  transform: translateY(-1px);
+  background: var(--bg-soft);
+  border-color: rgba(59, 130, 246, 0.3);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .header {
@@ -25,12 +27,18 @@
 }
 
 .badge {
-  font-size: 12px;
+  font-size: clamp(11px, 1.5vw, 12px);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  transition: all var(--transition-fast);
+}
+
+.card:hover .badge {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .badge.green {

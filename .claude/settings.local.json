@@ -15,7 +15,20 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(zip:*)"
+      "Bash(zip:*)",
+      "Bash(xargs docker stop:*)",
+      "Bash(xargs docker rm:*)",
+      "Bash(docker stop:*)",
+      "Bash(lsof:*)",
+      "Bash(docker rm:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker cp:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker ps:*)",
+      "Bash(npm install)",
+      "Bash(npm run dev:*)",
+      "Bash(npm install:*)",
+      "Bash(open http://localhost:5173)"
     ],
     "deny": [],
     "ask": []

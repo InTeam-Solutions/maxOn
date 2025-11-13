@@ -17,9 +17,11 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@rollup/rollup-darwin-arm64": "^4.53.2",
+    "@swc/core-darwin-arm64": "^1.15.1",
+    "@types/node": "^20.16.5",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.5",
-    "@types/node": "^20.16.5",
     "@vitejs/plugin-react-swc": "^3.7.0",
     "typescript": "^5.6.3",
     "vite": "^5.4.8"
