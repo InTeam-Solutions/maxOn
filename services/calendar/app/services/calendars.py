@@ -13,7 +13,7 @@ from app import models
 
 
 async def create_calendar(
-    session: AsyncSession, *, name: Optional[str], user_id: UUID
+    session: AsyncSession, *, name: Optional[str], user_id: int
 ) -> models.Calendar:
     for _ in range(5):
         calendar = models.Calendar(name=name, user_id=user_id, public_token=_generate_token())
@@ -49,6 +49,20 @@ async def get_calendar_by_token(session: AsyncSession, public_token: str) -> Opt
         select(models.Calendar).where(models.Calendar.public_token == public_token)
     )
     return result.scalar_one_or_none()
+
+
+async def get_calendar_by_user(session: AsyncSession, user_id: int) -> Optional[models.Calendar]:
+    result = await session.execute(select(models.Calendar).where(models.Calendar.user_id == user_id))
+    return result.scalar_one_or_none()
+
+
+async def ensure_calendar(
+    session: AsyncSession, *, user_id: int, name: Optional[str] = None
+) -> models.Calendar:
+    calendar = await get_calendar_by_user(session, user_id)
+    if calendar:
+        return calendar
+    return await create_calendar(session, name=name, user_id=user_id)
 
 
 async def list_events_for_calendar(session: AsyncSession, calendar_id: UUID) -> list[models.Event]:

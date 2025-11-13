@@ -12,7 +12,7 @@ from app.db import get_session
 from app.main import create_app
 
 
-USER_ID = "11111111-1111-1111-1111-111111111111"
+USER_ID = 1111111111
 
 
 @pytest_asyncio.fixture
@@ -62,6 +62,26 @@ async def test_create_calendar_returns_public_link(client: AsyncClient):
     assert payload["id"]
     assert payload["user_id"] == USER_ID
     assert payload["public_ics_url"].endswith(".ics")
+
+
+@pytest.mark.asyncio
+async def test_get_calendar_by_user(client: AsyncClient):
+    first = await create_calendar(client)
+    response = await client.get(f"/api/calendars/users/{USER_ID}/calendar")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == first["id"]
+    assert payload["public_ics_url"] == first["public_ics_url"]
+
+
+@pytest.mark.asyncio
+async def test_ensure_calendar_returns_existing(client: AsyncClient):
+    first = await create_calendar(client)
+    response = await client.post(f"/api/calendars/users/{USER_ID}/calendar", json={"name": "Alt"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == first["id"]
+    assert payload["name"] == first["name"]
 
 
 @pytest.mark.asyncio

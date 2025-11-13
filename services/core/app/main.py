@@ -1,9 +1,13 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
+from datetime import datetime, time as time_type, timezone
 import logging
 import os
+
+from dateutil import parser as dtparser
+import httpx
 
 from shared.database import init_db, get_db, Base
 from shared.schemas.events import EventCreate, EventUpdate, EventResponse
@@ -25,6 +29,91 @@ app = FastAPI(
 )
 
 logger = setup_logger("core_service", level=os.getenv("LOG_LEVEL", "INFO"))
+CALENDAR_SERVICE_URL = os.getenv("CALENDAR_SERVICE_URL")
+calendar_http_client: Optional[httpx.AsyncClient] = None
+DEFAULT_EVENT_TIME = time_type(hour=9, minute=0)
+DEFAULT_DURATION_MINUTES = 60
+
+
+def _parse_calendar_user_id(raw_user_id: str) -> Optional[int]:
+    try:
+        return int(raw_user_id)
+    except (TypeError, ValueError):
+        logger.warning("Cannot convert user_id %s to int for calendar sync", raw_user_id)
+        return None
+
+
+def _build_iso_datetime(date_str: str, time_str: Optional[str]) -> str:
+    date_obj = dtparser.parse(date_str).date()
+    if time_str:
+        time_obj = dtparser.parse(time_str).time().replace(second=0, microsecond=0)
+    else:
+        time_obj = DEFAULT_EVENT_TIME
+    combined = datetime.combine(date_obj, time_obj, tzinfo=timezone.utc)
+    return combined.isoformat().replace("+00:00", "Z")
+
+
+async def _ensure_calendar_for_user(user_id: str, name: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    if not (CALENDAR_SERVICE_URL and calendar_http_client):
+        return None
+    normalized_id = _parse_calendar_user_id(user_id)
+    if normalized_id is None:
+        return None
+
+    payload: Dict[str, Any] = {}
+    if name:
+        payload["name"] = name
+
+    try:
+        response = await calendar_http_client.post(
+            f"{CALENDAR_SERVICE_URL}/api/calendars/users/{normalized_id}/calendar",
+            json=payload,
+        )
+        if response.status_code >= 400:
+            logger.warning("Failed to ensure calendar for user %s: %s", user_id, response.text)
+            return None
+        return response.json()
+    except Exception as exc:
+        logger.warning("Calendar ensure failed for user %s: %s", user_id, exc)
+        return None
+
+
+async def _push_event_to_calendar(event: Dict[str, Any], calendar_name: Optional[str] = None) -> None:
+    if not CALENDAR_SERVICE_URL or not calendar_http_client:
+        return
+
+    user_id = event.get("user_id")
+    date_str = event.get("date")
+    if not user_id or not date_str:
+        return
+    normalized_id = _parse_calendar_user_id(user_id)
+    if normalized_id is None:
+        return
+
+    calendar = await _ensure_calendar_for_user(str(normalized_id), name=calendar_name)
+    if not calendar:
+        return
+
+    try:
+        payload = {
+            "title": event.get("title") or "Событие",
+            "brief_description": event.get("notes"),
+            "start_datetime": _build_iso_datetime(date_str, event.get("time")),
+            "duration_minutes": event.get("duration_minutes") or DEFAULT_DURATION_MINUTES,
+        }
+        response = await calendar_http_client.post(
+            f"{CALENDAR_SERVICE_URL}/api/calendars/{calendar['id']}/events",
+            json=payload,
+        )
+        if response.status_code >= 400:
+            logger.warning("Failed to push event %s to calendar: %s", event.get("id"), response.text)
+    except Exception as exc:
+        logger.warning("Calendar sync failed for event %s: %s", event.get("id"), exc)
+
+
+async def _push_events_batch(events: List[Dict[str, Any]], calendar_name: Optional[str] = None) -> None:
+    for event in events:
+        await _push_event_to_calendar(event, calendar_name=calendar_name)
 
 # Database initialization
 @app.on_event("startup")
@@ -32,12 +121,22 @@ async def startup():
     logger.info("Starting Core Service...")
     db = init_db()
     Base.metadata.create_all(bind=db.engine)
+    global calendar_http_client
+    if CALENDAR_SERVICE_URL:
+        calendar_http_client = httpx.AsyncClient(timeout=10.0)
+        logger.info("Calendar integration enabled at %s", CALENDAR_SERVICE_URL)
+    else:
+        logger.info("Calendar integration disabled (CALENDAR_SERVICE_URL not set)")
     logger.info("✅ Core Service started successfully")
 
 
 @app.on_event("shutdown")
 async def shutdown():
     logger.info("Shutting down Core Service...")
+    global calendar_http_client
+    if calendar_http_client:
+        await calendar_http_client.aclose()
+        calendar_http_client = None
 
 
 # Health checks
@@ -78,6 +177,7 @@ async def create_event(event: EventCreate):
                 linked_step_id=event.linked_step_id,
                 linked_goal_id=event.linked_goal_id
             )
+        await _push_event_to_calendar(result)
         logger.info(f"Created event {result['id']} for user {event.user_id}")
         return result
     except Exception as e:
@@ -481,6 +581,7 @@ async def schedule_goal_steps(goal_id: int, request: ScheduleRequest):
         if "error" in result:
             raise HTTPException(status_code=404, detail=result["error"])
 
+        await _push_events_batch(result.get("created_events", []), calendar_name=result.get("title"))
         logger.info(f"Scheduled {len(request.schedule_plan)} steps for goal {goal_id}")
         return result
     except HTTPException:

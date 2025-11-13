@@ -40,6 +40,7 @@ ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://orchestrator:8001")
 CORE_SERVICE_URL = os.getenv("CORE_SERVICE_URL", "http://core:8004")
 LLM_SERVICE_URL = os.getenv("LLM_SERVICE_URL", "http://llm:8003")
 CONTEXT_SERVICE_URL = os.getenv("CONTEXT_SERVICE_URL", "http://context:8002")
+CALENDAR_SERVICE_URL = os.getenv("CALENDAR_SERVICE_URL")
 
 if not BOT_TOKEN:
     raise RuntimeError("MAX_BOT_TOKEN or TELEGRAM_BOT_TOKEN is required")
@@ -62,11 +63,30 @@ def main_menu_keyboard():
     return keyboard_from_pairs([
         [("🎯 Мои цели", "show_goals"), ("📅 Календарь", "show_events")],
         [("➕ Новая цель", "new_goal"), ("➕ Событие", "new_event")],
+        [("🔗 Мой календарь", "calendar_link")],
     ])
 
 
 def single_menu_button(text: str, payload: str):
     return keyboard_from_pairs([[(text, payload)]])
+
+
+async def fetch_calendar_link(user_id: str) -> Optional[str]:
+    if not CALENDAR_SERVICE_URL:
+        return None
+    try:
+        response = await http_client.post(
+            f"{CALENDAR_SERVICE_URL}/api/calendars/users/{user_id}/calendar",
+            json={},
+        )
+        if response.status_code >= 400:
+            logger.warning("Failed to fetch calendar link for %s: %s", user_id, response.text)
+            return None
+        data = response.json()
+        return data.get("public_ics_url")
+    except Exception as exc:
+        logger.error("Calendar link request failed for %s: %s", user_id, exc)
+        return None
 
 
 # --- Core functions ---
@@ -238,7 +258,8 @@ async def show_events_for_user(chat_id: Optional[int], user_id: str, bot_instanc
             if events:
                 rendered = render_events(events, title="📅 События на этой неделе")
                 keyboard = keyboard_from_pairs([
-                    [("➕ Новое событие", "new_event"), ("🏠 Меню", "main_menu")]
+                    [("➕ Новое событие", "new_event"), ("🏠 Меню", "main_menu")],
+                    [("🔗 Мой календарь", "calendar_link")],
                 ])
                 await bot_instance.send_message(
                     chat_id=chat_id,
@@ -247,7 +268,11 @@ async def show_events_for_user(chat_id: Optional[int], user_id: str, bot_instanc
                     parse_mode=ParseMode.HTML
                 )
             else:
-                keyboard = single_menu_button("➕ Создать событие", "new_event")
+                keyboard = keyboard_from_pairs([
+                    [("➕ Создать событие", "new_event")],
+                    [("🔗 Мой календарь", "calendar_link")],
+                    [("🏠 Меню", "main_menu")],
+                ])
                 await bot_instance.send_message(
                     chat_id=chat_id,
                     text=(
@@ -323,6 +348,37 @@ async def callback_show_goals(callback: MessageCallback):
 async def callback_show_events(callback: MessageCallback):
     user_id = str(callback.callback.user.user_id)
     await show_events_for_user(callback.message.recipient.chat_id, user_id, callback.message.bot)
+
+
+@dp.message_callback(F.callback.payload == "calendar_link")
+async def callback_calendar_link(callback: MessageCallback):
+    user_id = str(callback.callback.user.user_id)
+    chat_id = callback.message.recipient.chat_id
+    await send_typing(callback.message.bot, chat_id)
+
+    link = await fetch_calendar_link(user_id)
+    if link:
+        text = (
+            "🔗 <b>Твоя подписка на календарь</b>\n\n"
+            f"{link}\n\n"
+            "Добавь эту ссылку в Google Calendar (Other calendars → By URL) "
+            "или Apple Calendar (Файл → Новая подписка на календарь)."
+        )
+    else:
+        text = (
+            "😔 Не удалось получить ссылку на календарь. "
+            "Попробуй позже или убедись, что сервис календаря запущен."
+        )
+
+    keyboard = keyboard_from_pairs([
+        [("📅 События", "show_events"), ("🏠 Меню", "main_menu")],
+    ])
+    await callback.message.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        attachments=_attachments(keyboard),
+        parse_mode=ParseMode.HTML,
+    )
 
 
 @dp.message_callback(F.callback.payload == "new_goal")

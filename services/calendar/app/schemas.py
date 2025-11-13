@@ -8,13 +8,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class CalendarCreate(BaseModel):
-    user_id: UUID
+    user_id: int
+    name: Optional[str] = Field(default=None, max_length=255)
+
+
+class CalendarEnsureRequest(BaseModel):
     name: Optional[str] = Field(default=None, max_length=255)
 
 
 class CalendarResponse(BaseModel):
     id: UUID
-    user_id: UUID
+    user_id: int
     name: Optional[str]
     public_ics_url: str
 

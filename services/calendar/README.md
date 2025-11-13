@@ -11,7 +11,7 @@ Async FastAPI service that stores calendars/events in PostgreSQL and exposes a r
 
 ## Quick start
 
-The API listens on `http://localhost:7132`. Swagger UI stays available at `http://localhost:7132/docs`.
+The API listens on `http://localhost:7133`. Swagger UI stays available at `http://localhost:7133/docs`.
 
 ### Environment
 Сервис читает переменные с префиксом `CALENDAR_` (например, `CALENDAR_DATABASE_URL`). В docker-compose они прокидываются из корневого `.env`, так что дополнительных настроек не требуется.
@@ -20,18 +20,24 @@ The API listens on `http://localhost:7132`. Swagger UI stays available at `http:
 
 ### 1. Create a calendar
 ```bash
-curl -X POST http://localhost:7132/api/calendars \
+curl -X POST http://localhost:7133/api/calendars \
   -H "Content-Type: application/json" \
   -d '{
-        "user_id": "11111111-1111-1111-1111-111111111111",
+        "user_id": 12345678,
         "name": "Product Launch"
       }'
 ```
 Response contains the calendar UUID, `user_id`, and the public `.ics` URL. Save the URL – оно же используется в клиентах.
 
+Если нужно гарантированно получить календарь по пользователю (создать, если его ещё нет), вызывайте:
+```bash
+curl -X POST http://localhost:7133/api/calendars/users/<user_id>/calendar
+```
+А чтобы просто прочитать – `GET http://localhost:7133/api/calendars/users/<user_id>/calendar`.
+
 ### 2. Create an event
 ```bash
-curl -X POST http://localhost:7132/api/calendars/<calendar_id>/events \
+curl -X POST http://localhost:7133/api/calendars/<calendar_id>/events \
   -H "Content-Type: application/json" \
   -d '{
         "title": "Dry run",
@@ -48,7 +54,7 @@ Each event is stored as CONFIRMED; there is no update/delete in this MVP.
 
 ### 4. Fetch the `.ics` feed
 ```
-https://localhost:7132/calendar/<public_token>.ics
+https://localhost:7133/calendar/<public_token>.ics
 ```
 The token comes from the `public_ics_url` returned when the calendar was created.
 

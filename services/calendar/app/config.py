@@ -26,7 +26,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("CALENDAR_DATABASE_URL", "DATABASE_URL"),
     )
     public_base_url: str = Field(
-        default="http://localhost:7132",
+        default="http://localhost:7133",
         validation_alias=AliasChoices("CALENDAR_PUBLIC_BASE_URL", "PUBLIC_BASE_URL"),
     )
     ics_past_days: int | None = Field(

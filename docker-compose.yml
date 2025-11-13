@@ -46,6 +46,7 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-maxon}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-maxon}
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CALENDAR_SERVICE_URL=${CALENDAR_SERVICE_URL}
     depends_on:
       postgres:
         condition: service_healthy
@@ -119,6 +120,7 @@ services:
       - LLM_SERVICE_URL=http://llm:8003
       - CORE_SERVICE_URL=http://core:8004
       - REDIS_URL=redis://redis:6379/3
+      - CALENDAR_SERVICE_URL=${CALENDAR_SERVICE_URL}
     depends_on:
       context:
         condition: service_started
@@ -146,6 +148,7 @@ services:
       - MAX_BOT_TOKEN=${MAX_BOT_TOKEN}
       - ORCHESTRATOR_URL=http://orchestrator:8001
       - CORE_SERVICE_URL=http://core:8004
+      - CALENDAR_SERVICE_URL=${CALENDAR_SERVICE_URL}
     depends_on:
       orchestrator:
         condition: service_started
