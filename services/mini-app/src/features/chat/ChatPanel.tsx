@@ -3,7 +3,7 @@ import dayjs from 'dayjs';
 import { Input, Typography } from '@maxhub/max-ui';
 import clsx from 'clsx';
 import { useChat } from '../../store/ChatContext';
-import type { ChatAttachment } from '../../types/domain';
+import type { ChatAttachment, ChatButton, ChatMessage as ChatMessageType } from '../../types/domain';
 import styles from './ChatPanel.module.css';
 
 interface ChatPanelProps {
@@ -34,6 +34,26 @@ const AttachmentCard = ({ attachment }: { attachment: ChatAttachment }) => {
   );
 };
 
+const ButtonRow = ({ buttons, onButtonClick }: { buttons: ChatButton[]; onButtonClick: (button: ChatButton) => void }) => {
+  return (
+    <div className={styles.buttonRow}>
+      {buttons.map((button, index) => (
+        <button
+          key={index}
+          className={styles.chatButton}
+          onClick={() => onButtonClick(button)}
+        >
+          {button.text}
+        </button>
+      ))}
+    </div>
+  );
+};
+
+const HtmlMessage = ({ html }: { html: string }) => {
+  return <div className={styles.htmlContent} dangerouslySetInnerHTML={{ __html: html }} />;
+};
+
 export const ChatPanel = ({ elevated, onClose }: ChatPanelProps) => {
   const { messages, isSending, sendMessage } = useChat();
   const [draft, setDraft] = useState('');
@@ -47,7 +67,12 @@ export const ChatPanel = ({ elevated, onClose }: ChatPanelProps) => {
     if (!draft.trim()) return;
     await sendMessage(draft);
     setDraft('');
-    onClose?.();
+    // Don't auto-close chat after sending - let user continue conversation
+  };
+
+  const handleButtonClick = async (button: ChatButton) => {
+    // Send button action as a message
+    await sendMessage(button.action, button.data);
   };
 
   return (
@@ -74,11 +99,22 @@ export const ChatPanel = ({ elevated, onClose }: ChatPanelProps) => {
               message.author === 'user' ? styles.userBubble : styles.botBubble
             )}
           >
-            <Typography.Body variant="medium">{message.text}</Typography.Body>
+            {message.isHtml ? (
+              <HtmlMessage html={message.text} />
+            ) : (
+              <Typography.Body variant="medium">{message.text}</Typography.Body>
+            )}
             {message.attachments && (
               <div className={styles.attachments}>
                 {message.attachments.map((attachment) => (
                   <AttachmentCard key={attachment.payload.id} attachment={attachment} />
+                ))}
+              </div>
+            )}
+            {message.buttons && message.buttons.length > 0 && (
+              <div className={styles.buttons}>
+                {message.buttons.map((row, rowIndex) => (
+                  <ButtonRow key={rowIndex} buttons={row} onButtonClick={handleButtonClick} />
                 ))}
               </div>
             )}

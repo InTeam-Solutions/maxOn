@@ -89,19 +89,38 @@ async function sendRealMessage(
     const response = await apiClient.sendMessage(text, context);
 
     // Parse orchestrator response
-    const responseText = response.text || response.response || 'Понял вас!';
+    // Response format: { success, response_type, text, items, set_id, buttons, error? }
+    let responseText = 'Понял вас!';
+
+    if (response.text) {
+      responseText = response.text;
+    } else if (response.response) {
+      responseText = response.response;
+    }
+
+    // Log for debugging
+    console.log('[chatService] Orchestrator response:', response);
 
     return {
       id: `bot-${generateId()}`,
       author: 'maxon',
       text: responseText,
       timestamp: dayjs().toISOString(),
-      attachments: response.attachments || buildAttachments(context)
+      attachments: response.attachments || buildAttachments(context),
+      buttons: response.buttons || undefined,
+      isHtml: true // Orchestrator returns HTML formatted text
     };
   } catch (error) {
-    console.error('Failed to send message to API:', error);
-    // Fallback to mock mode on error
-    return sendMockMessage(text, context);
+    console.error('[chatService] Failed to send message to API:', error);
+
+    // Return a user-friendly error message instead of falling back to mock
+    return {
+      id: `bot-${generateId()}`,
+      author: 'maxon',
+      text: 'Извини, сейчас у меня проблемы с обработкой запроса. Попробуй написать в бота @t623_hakaton_bot или повтори позже.',
+      timestamp: dayjs().toISOString(),
+      isHtml: false
+    };
   }
 }
 

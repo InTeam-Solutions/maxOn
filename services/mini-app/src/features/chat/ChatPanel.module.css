@@ -35,10 +35,14 @@
 .messages {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding-right: 4px;
+  min-height: 0; /* Fix flex shrinking */
+  max-height: 100%; /* Prevent overflow */
 }
 
 .bubble {
@@ -169,8 +173,71 @@
   }
 }
 
+/* HTML Content Styling */
+.htmlContent {
+  line-height: 1.5;
+}
+
+.htmlContent b,
+.htmlContent strong {
+  font-weight: 600;
+}
+
+.htmlContent ul,
+.htmlContent ol {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.htmlContent li {
+  margin: 4px 0;
+}
+
+/* Button Styles */
+.buttons {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.buttonRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chatButton {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 16px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 8px;
+  color: var(--accent-blue);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.chatButton:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.5);
+  transform: translateY(-1px);
+}
+
+.chatButton:active {
+  transform: translateY(0);
+}
+
 @media (max-width: 600px) {
   .bubble {
     max-width: 100%;
+  }
+
+  .chatButton {
+    padding: 8px 12px;
+    font-size: 13px;
   }
 }

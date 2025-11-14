@@ -1,12 +1,13 @@
 import clsx from 'clsx';
 import dayjs from 'dayjs';
-import { Typography } from '@maxhub/max-ui';
+import { Typography, IconButton } from '@maxhub/max-ui';
 import type { Task } from '../types/domain';
 import styles from './TaskCard.module.css';
 
 interface TaskCardProps {
   task: Task;
   onClick?: (task: Task) => void;
+  onDelete?: (task: Task) => void;
   accent?: 'green' | 'blue' | 'violet';
 }
 
@@ -16,25 +17,45 @@ const statusLabel: Record<Task['status'], string> = {
   done: 'Выполнено'
 };
 
-export const TaskCard = ({ task, onClick, accent = 'blue' }: TaskCardProps) => {
+export const TaskCard = ({ task, onClick, onDelete, accent = 'blue' }: TaskCardProps) => {
   const dateLabel = dayjs(task.dueDate).format('DD MMM HH:mm');
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+    onDelete?.(task);
+  };
+
   return (
-    <button type="button" className={styles.card} onClick={() => onClick?.(task)}>
-      <div className={styles.header}>
-        <Typography.Title variant="small-strong">
-          {task.title}
-        </Typography.Title>
-        <span className={clsx(styles.badge, styles[accent])}>
-          {statusLabel[task.status] || dateLabel}
-        </span>
-      </div>
-      <Typography.Body variant="small" className={styles.goal}>
-        Цель: {task.goalTitle}
-      </Typography.Body>
-      <div className={styles.meta}>
-        <span className={styles.date}>{dateLabel}</span>
-        <span className={styles.label}>{task.focusArea}</span>
-      </div>
-    </button>
+    <div className={styles.cardWrapper}>
+      <button type="button" className={styles.card} onClick={() => onClick?.(task)}>
+        <div className={styles.header}>
+          <Typography.Title variant="small-strong">
+            {task.title}
+          </Typography.Title>
+          <span className={clsx(styles.badge, styles[accent])}>
+            {statusLabel[task.status] || dateLabel}
+          </span>
+        </div>
+        <Typography.Body variant="small" className={styles.goal}>
+          Цель: {task.goalTitle}
+        </Typography.Body>
+        <div className={styles.meta}>
+          <span className={styles.date}>{dateLabel}</span>
+          <span className={styles.label}>{task.focusArea}</span>
+        </div>
+      </button>
+      {onDelete && (
+        <IconButton
+          size="small"
+          mode="tertiary"
+          appearance="neutral"
+          aria-label="Удалить задачу"
+          onClick={handleDelete}
+          className={styles.deleteButton}
+        >
+          🗑️
+        </IconButton>
+      )}
+    </div>
   );
 };

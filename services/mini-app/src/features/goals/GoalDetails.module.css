@@ -45,13 +45,24 @@
 .stepRow {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   background: var(--bg-soft);
-  padding: 12px;
+  padding: 8px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.stepButton {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border: none;
+  background: transparent;
   color: var(--text-primary);
   cursor: pointer;
+  text-align: left;
 }
 
 .checkbox {
@@ -61,14 +72,21 @@
   border: 1px solid var(--text-secondary);
 }
 
-.stepRow.completed .checkbox {
+.stepButton.completed .checkbox {
   background: var(--accent-green);
   border-color: var(--accent-green);
 }
 
-.stepRow.completed {
+.stepButton.completed {
   color: var(--text-secondary);
   text-decoration: line-through;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
 }
 
 .gradientButton {

@@ -47,11 +47,19 @@ export type ChatAttachment =
       payload: Pick<Goal, 'id' | 'title' | 'description' | 'progress'>;
     };
 
+export interface ChatButton {
+  text: string;
+  action: string;
+  data?: any;
+}
+
 export interface ChatMessage {
   id: string;
   author: 'user' | 'maxon';
   text: string;
   timestamp: string;
   attachments?: ChatAttachment[];
+  buttons?: ChatButton[][];
+  isHtml?: boolean;
 }
 

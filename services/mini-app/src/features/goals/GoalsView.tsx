@@ -12,7 +12,7 @@ const USE_REAL_API = true; // Force real API in production
 
 export const GoalsView = () => {
   const { selectedGoalId, selectGoal } = useAppState();
-  const [goals, setGoals] = useState<Goal[]>(mockGoals);
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,7 +30,7 @@ export const GoalsView = () => {
     }
   }, [selectedGoalId, selectGoal, goals]);
 
-  const loadGoals = async () => {
+  const loadGoals = async (preserveSelection = false) => {
     try {
       setLoading(true);
       setError(null);
@@ -53,16 +53,29 @@ export const GoalsView = () => {
         }))
       }));
 
-      setGoals(transformedGoals.length > 0 ? transformedGoals : mockGoals);
+      setGoals(transformedGoals);
+
+      // If goal was deleted and we're not preserving selection, select first goal
+      if (!preserveSelection && transformedGoals.length > 0) {
+        selectGoal(transformedGoals[0].id);
+      }
+
       console.log('[GoalsView] Loaded goals:', transformedGoals);
     } catch (err) {
       console.error('[GoalsView] Failed to load goals:', err);
       setError('Не удалось загрузить цели');
-      // Fallback to mock data
-      setGoals(mockGoals);
+      setGoals([]);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGoalUpdated = () => {
+    loadGoals(true); // Preserve current selection
+  };
+
+  const handleGoalDeleted = () => {
+    loadGoals(false); // Don't preserve selection, select first goal
   };
 
   const calculateProgress = (steps: any[]): number => {
@@ -113,7 +126,11 @@ export const GoalsView = () => {
         </div>
         <div className={styles.details}>
           {currentGoal ? (
-            <GoalDetails goal={currentGoal} />
+            <GoalDetails
+              goal={currentGoal}
+              onGoalUpdated={handleGoalUpdated}
+              onGoalDeleted={handleGoalDeleted}
+            />
           ) : (
             <div className={styles.placeholder}>Выбери цель слева, чтобы увидеть детали.</div>
           )}

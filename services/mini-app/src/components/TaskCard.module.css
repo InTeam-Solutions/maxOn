@@ -1,5 +1,12 @@
+.cardWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .card {
-  width: 100%;
+  flex: 1;
   text-align: left;
   border: none;
   background: var(--bg-elevated);
@@ -71,5 +78,9 @@
 
 .label {
   color: var(--text-muted);
+}
+
+.deleteButton {
+  flex-shrink: 0;
 }
 

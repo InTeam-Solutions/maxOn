@@ -1,6 +1,5 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 import type { ChatMessage } from '../types/domain';
-import { initialChatMessages } from '../mocks/chat';
 import { chatService, type ChatContextPayload } from '../services/chatService';
 import { generateId } from '../utils/id';
 
@@ -13,8 +12,16 @@ interface ChatContextValue {
 
 const ChatContext = createContext<ChatContextValue | null>(null);
 
+// Welcome message from maxOn
+const welcomeMessage: ChatMessage = {
+  id: 'welcome',
+  author: 'maxon',
+  text: 'Привет! Я maxOn — твой AI-коуч. Чем могу помочь сегодня? 🎯',
+  timestamp: new Date().toISOString()
+};
+
 export const ChatProvider = ({ children }: { children: ReactNode }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>(initialChatMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage]);
   const [isSending, setIsSending] = useState(false);
 
   const sendMessage = async (text: string, context?: ChatContextPayload) => {
@@ -37,7 +44,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const resetChat = () => setMessages(initialChatMessages);
+  const resetChat = () => setMessages([welcomeMessage]);
 
   const value = useMemo<ChatContextValue>(
     () => ({

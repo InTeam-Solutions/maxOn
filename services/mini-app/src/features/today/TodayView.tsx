@@ -1,11 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import dayjs from 'dayjs';
 import { Button, Input, Typography } from '@maxhub/max-ui';
 import { TaskCard } from '../../components/TaskCard';
 import { SectionHeading } from '../../components/SectionHeading';
 import { useAppState } from '../../store/AppStateContext';
 import { useChat } from '../../store/ChatContext';
-import { mockTasks, todaySummary } from '../../mocks/data';
+import { apiClient } from '../../services/api';
+import type { Goal, Task } from '../../types/domain';
+import {
+  extractTasksFromGoals,
+  getTodayTasks,
+  getUpcomingTasks,
+  countTasksByDate
+} from '../../utils/taskHelpers';
 import styles from './TodayView.module.css';
 
 const buildMiniCalendar = (date: string) => {
@@ -18,34 +25,78 @@ export const TodayView = () => {
   const { setActiveTab, selectGoal, selectedDate, setSelectedDate, setChatOpen } = useAppState();
   const { sendMessage } = useChat();
   const [prompt, setPrompt] = useState('');
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const tasksToday = useMemo(
-    () => mockTasks.filter((task) => dayjs(task.dueDate).isSame(dayjs(), 'day')),
-    []
-  );
+  // Load goals from API
+  useEffect(() => {
+    loadGoals();
+  }, []);
 
-  const nextThreeDays = useMemo(
-    () =>
-      mockTasks.filter((task) => {
-        const diff = dayjs(task.dueDate).startOf('day').diff(dayjs().startOf('day'), 'day');
-        return diff > 0 && diff <= 3;
-      }),
-    []
-  );
+  const loadGoals = async () => {
+    try {
+      setLoading(true);
+      const data = await apiClient.getGoals();
+
+      // Transform API response to match UI format
+      const transformedGoals: Goal[] = data.map((g: any) => ({
+        id: String(g.id),
+        title: g.title,
+        description: g.description || '',
+        targetDate: g.target_date || new Date().toISOString(),
+        progress: g.progress_percent || 0,
+        category: g.category || 'Общее',
+        priority: g.priority || 'medium',
+        status: g.status || 'active',
+        steps: (g.steps || []).map((s: any) => ({
+          id: String(s.id),
+          title: s.title,
+          completed: s.status === 'completed',
+          status: s.status,
+          planned_date: s.planned_date,
+          planned_time: s.planned_time
+        }))
+      }));
+
+      setGoals(transformedGoals);
+      console.log('[TodayView] Loaded goals:', transformedGoals);
+    } catch (err) {
+      console.error('[TodayView] Failed to load goals:', err);
+      setGoals([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Extract tasks from goals (steps with planned_date)
+  const allTasks = useMemo(() => extractTasksFromGoals(goals), [goals]);
+
+  const tasksToday = useMemo(() => getTodayTasks(allTasks), [allTasks]);
+
+  const nextThreeDays = useMemo(() => getUpcomingTasks(allTasks, 3), [allTasks]);
 
   const calendarDays = buildMiniCalendar(selectedDate);
-  const tasksByDay = useMemo(() => {
-    const collection = new Map<string, number>();
-    mockTasks.forEach((task) => {
-      const key = dayjs(task.dueDate).format('YYYY-MM-DD');
-      collection.set(key, (collection.get(key) ?? 0) + 1);
-    });
-    return collection;
-  }, []);
+  const tasksByDay = useMemo(() => countTasksByDate(allTasks), [allTasks]);
+
+  const activeGoalsCount = goals.filter(g => g.status === 'active').length;
+  const stepsToday = tasksToday.length;
 
   const handleTaskClick = (goalId: string) => {
     selectGoal(goalId);
     setActiveTab('goals');
+  };
+
+  const handleDeleteTask = async (task: Task) => {
+    if (!confirm(`Удалить задачу "${task.title}"?`)) return;
+
+    try {
+      await apiClient.deleteStep(task.id);
+      // Reload goals to update task list
+      loadGoals();
+    } catch (err) {
+      console.error('[TodayView] Failed to delete task:', err);
+      alert('Не удалось удалить задачу');
+    }
   };
 
   const handlePromptSubmit = async () => {
@@ -64,7 +115,7 @@ export const TodayView = () => {
               Главная
             </Typography.Title>
             <Typography.Body variant="medium" className={styles.subtitle}>
-              {todaySummary.activeGoals} активные цели · {todaySummary.stepsToday} шагов на сегодня
+              {loading ? 'Загрузка...' : `${activeGoalsCount} активные цели · ${stepsToday} шагов на сегодня`}
             </Typography.Body>
           </div>
           <span className={styles.fireEmoji}>🔥</span>
@@ -94,7 +145,12 @@ export const TodayView = () => {
         <SectionHeading title="Сегодня позже" subtitle="Что осталось закрыть" />
         <div className={styles.list}>
           {tasksToday.map((task) => (
-            <TaskCard key={task.id} task={task} onClick={() => handleTaskClick(task.goalId)} />
+            <TaskCard
+              key={task.id}
+              task={task}
+              onClick={() => handleTaskClick(task.goalId)}
+              onDelete={handleDeleteTask}
+            />
           ))}
           {tasksToday.length === 0 && (
             <div className={styles.placeholder}>Сегодня всё выполнено 👏</div>
@@ -111,6 +167,7 @@ export const TodayView = () => {
               task={task}
               accent="violet"
               onClick={() => handleTaskClick(task.goalId)}
+              onDelete={handleDeleteTask}
             />
           ))}
         </div>
