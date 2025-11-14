@@ -57,6 +57,9 @@ class ApiClient {
     title: string;
     description?: string;
     target_date?: string;
+    category?: string;
+    priority?: string;
+    status?: string;
   }): Promise<Goal> {
     return this.request<Goal>(`${this.coreUrl}/api/goals?user_id=${this.userId}`, {
       method: 'POST',
@@ -92,6 +95,19 @@ class ApiClient {
   }
 
   // ==================== Steps API ====================
+
+  async createStep(data: {
+    goal_id: number;
+    title: string;
+    planned_date?: string;
+    planned_time?: string;
+    status?: string;
+  }): Promise<any> {
+    return this.request<any>(`${this.coreUrl}/api/steps?user_id=${this.userId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
 
   async updateStep(
     stepId: string,
@@ -137,6 +153,7 @@ class ApiClient {
     date: string;
     time?: string;
     description?: string;
+    notes?: string;
   }): Promise<any> {
     return this.request<any>(`${this.coreUrl}/api/events?user_id=${this.userId}`, {
       method: 'POST',
@@ -152,7 +169,7 @@ class ApiClient {
         method: 'POST',
       });
     } catch (error) {
-      console.error('[API] Failed to reset chat state:', error);
+      // Silently ignore - endpoint may not exist, not critical
     }
   }
 
@@ -163,6 +180,16 @@ class ApiClient {
         user_id: this.userId,
         message,
         context,
+      }),
+    });
+  }
+
+  async sendCallback(callback_data: string): Promise<any> {
+    return this.request<any>(`${this.orchestratorUrl}/api/callback`, {
+      method: 'POST',
+      body: JSON.stringify({
+        user_id: this.userId,
+        callback_data,
       }),
     });
   }

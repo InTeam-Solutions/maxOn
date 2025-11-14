@@ -92,7 +92,7 @@ export const GoalsView = () => {
     <div className={styles.goalsPage}>
       <div>
         <Typography.Title variant="medium-strong">
-          Цели {USE_REAL_API && '(Live Data)'}
+          Цели
         </Typography.Title>
         <Typography.Body variant="small" className={styles.subtitle}>
           {loading ? 'Загрузка...' : error ? error : 'Управляй прогрессом и отмечай шаги'}

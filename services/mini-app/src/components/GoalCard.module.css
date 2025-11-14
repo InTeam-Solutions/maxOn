@@ -4,26 +4,47 @@
   background: var(--bg-elevated);
   border: var(--border-soft);
   border-radius: var(--card-radius);
-  padding: clamp(16px, 2vw, 20px);
+  padding: clamp(18px, 2vw, 24px);
   color: inherit;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   transition: all var(--transition-base);
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(12px);
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--gradient-glow);
+  opacity: 0;
+  transition: opacity var(--transition-base);
+  pointer-events: none;
 }
 
 .card:hover {
   background: var(--bg-soft);
-  border-color: rgba(255, 255, 255, 0.1);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  border-color: var(--border-medium);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+}
+
+.card:hover::before {
+  opacity: 0.3;
 }
 
 .card.active {
-  border-color: var(--accent-blue);
-  box-shadow: 0 0 0 1px var(--accent-blue), var(--shadow-lg);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 1px var(--accent-primary), var(--shadow-glow), var(--shadow-lg);
   background: var(--bg-soft);
+}
+
+.card.active::before {
+  opacity: 0.5;
 }
 
 .header {
@@ -31,44 +52,58 @@
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+  position: relative;
+  z-index: 1;
 }
 
 .deadline {
-  color: var(--accent-green);
+  color: var(--accent-success);
   font-size: clamp(12px, 1.5vw, 13px);
-  font-weight: 500;
+  font-weight: 600;
+  background: rgba(16, 185, 129, 0.1);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(16, 185, 129, 0.2);
 }
 
 .description {
   color: var(--text-secondary);
   font-size: clamp(13px, 1.5vw, 14px);
-  line-height: 1.5;
+  line-height: 1.6;
+  position: relative;
+  z-index: 1;
 }
 
 .progressRow {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
+  position: relative;
+  z-index: 1;
 }
 
 .progressRow > span {
-  min-width: 40px;
+  min-width: 45px;
   text-align: right;
 }
 
 .progressValue {
   font-size: 13px;
-  color: var(--text-secondary);
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .meta {
   display: flex;
   justify-content: space-between;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-size: 13px;
+  position: relative;
+  z-index: 1;
 }
 
 .status {
-  color: var(--accent-blue);
+  color: var(--accent-primary);
+  font-weight: 500;
 }
 

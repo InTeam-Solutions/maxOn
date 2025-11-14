@@ -35,6 +35,13 @@
   margin-bottom: 6px;
 }
 
+.stepsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
 .stepsList {
   display: flex;
   flex-direction: column;

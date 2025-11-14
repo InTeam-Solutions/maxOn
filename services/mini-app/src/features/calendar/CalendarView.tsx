@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import dayjs, { Dayjs } from 'dayjs';
 import { IconButton, Button, Typography } from '@maxhub/max-ui';
 import clsx from 'clsx';
+import { AddEventModal } from '../../components/AddEventModal';
 import { useAppState } from '../../store/AppStateContext';
 import { useChat } from '../../store/ChatContext';
 import { apiClient } from '../../services/api';
@@ -25,6 +26,7 @@ export const CalendarView = () => {
   const [completedTasks, setCompletedTasks] = useState<Record<string, boolean>>({});
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showAddEventModal, setShowAddEventModal] = useState(false);
 
   // Load goals from API
   useEffect(() => {
@@ -176,7 +178,7 @@ export const CalendarView = () => {
 
       <section className="card">
         <Typography.Title variant="medium-strong">
-          Повестка дня
+          Задачи на день
         </Typography.Title>
         <Typography.Body variant="small" className={styles.agendaSubtitle}>
           {dayjs(selectedDate).format('dddd, DD MMMM')}
@@ -234,7 +236,25 @@ export const CalendarView = () => {
             </div>
           ))}
         </div>
+
+        <div className={styles.actionsRow}>
+          <Button
+            mode="primary"
+            appearance="themed"
+            onClick={() => setShowAddEventModal(true)}
+          >
+            + Событие
+          </Button>
+        </div>
       </section>
+
+      {showAddEventModal && (
+        <AddEventModal
+          onClose={() => setShowAddEventModal(false)}
+          onSuccess={() => loadGoals()}
+          selectedDate={selectedDate}
+        />
+      )}
     </div>
   );
 };

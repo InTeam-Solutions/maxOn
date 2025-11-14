@@ -6,6 +6,7 @@ import { ProgressBar } from '../../components/ProgressBar';
 import { useChat } from '../../store/ChatContext';
 import { useAppState } from '../../store/AppStateContext';
 import { apiClient } from '../../services/api';
+import { AddStepModal } from '../../components/AddStepModal';
 import styles from './GoalDetails.module.css';
 
 interface GoalDetailsProps {
@@ -17,6 +18,7 @@ interface GoalDetailsProps {
 export const GoalDetails = ({ goal, onGoalUpdated, onGoalDeleted }: GoalDetailsProps) => {
   const [steps, setSteps] = useState<GoalStep[]>(goal.steps);
   const [deletingStepId, setDeletingStepId] = useState<string | null>(null);
+  const [showAddStepModal, setShowAddStepModal] = useState(false);
   const { setChatOpen } = useAppState();
   const { sendMessage } = useChat();
 
@@ -115,9 +117,19 @@ export const GoalDetails = ({ goal, onGoalUpdated, onGoalDeleted }: GoalDetailsP
       </div>
 
       <div className={styles.steps}>
-        <Typography.Body variant="small" className={styles.label}>
-          Подзадачи
-        </Typography.Body>
+        <div className={styles.stepsHeader}>
+          <Typography.Body variant="small" className={styles.label}>
+            Подзадачи
+          </Typography.Body>
+          <Button
+            size="small"
+            mode="secondary"
+            appearance="neutral-themed"
+            onClick={() => setShowAddStepModal(true)}
+          >
+            + Подцель
+          </Button>
+        </div>
         <div className={styles.stepsList}>
           {steps.map((step) => (
             <div key={step.id} className={styles.stepRow}>
@@ -164,6 +176,17 @@ export const GoalDetails = ({ goal, onGoalUpdated, onGoalDeleted }: GoalDetailsP
           Удалить цель
         </Button>
       </div>
+
+      {showAddStepModal && (
+        <AddStepModal
+          goalId={goal.id}
+          onClose={() => setShowAddStepModal(false)}
+          onSuccess={() => {
+            onGoalUpdated?.();
+            setShowAddStepModal(false);
+          }}
+        />
+      )}
     </div>
   );
 };

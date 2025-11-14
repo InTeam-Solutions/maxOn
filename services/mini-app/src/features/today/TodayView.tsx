@@ -3,6 +3,8 @@ import dayjs from 'dayjs';
 import { Button, Input, Typography } from '@maxhub/max-ui';
 import { TaskCard } from '../../components/TaskCard';
 import { SectionHeading } from '../../components/SectionHeading';
+import { AddGoalModal } from '../../components/AddGoalModal';
+import { AddTaskModal } from '../../components/AddTaskModal';
 import { useAppState } from '../../store/AppStateContext';
 import { useChat } from '../../store/ChatContext';
 import { apiClient } from '../../services/api';
@@ -27,6 +29,8 @@ export const TodayView = () => {
   const [prompt, setPrompt] = useState('');
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showAddGoalModal, setShowAddGoalModal] = useState(false);
+  const [showAddTaskModal, setShowAddTaskModal] = useState(false);
 
   // Load goals from API
   useEffect(() => {
@@ -124,12 +128,13 @@ export const TodayView = () => {
           {calendarDays.map((day) => {
             const key = day.format('YYYY-MM-DD');
             const isActive = key === selectedDate;
+            const isToday = key === dayjs().format('YYYY-MM-DD');
             const hasTasks = tasksByDay.get(key);
             return (
               <button
                 key={key}
                 type="button"
-                className={`${styles.calendarDay} ${isActive ? styles.active : ''}`}
+                className={`${styles.calendarDay} ${isActive ? styles.active : ''} ${isToday ? styles.today : ''}`}
                 onClick={() => setSelectedDate(key)}
               >
                 <span className={styles.calendarWeekday}>{day.format('dd')}</span>
@@ -175,35 +180,36 @@ export const TodayView = () => {
 
       <div className={styles.actionsRow}>
         <Button
+          mode="secondary"
+          appearance="neutral-themed"
+          onClick={() => setShowAddTaskModal(true)}
+        >
+          + Задача
+        </Button>
+        <Button
           mode="primary"
           appearance="themed"
           className={styles.gradientButton}
-          onClick={() => setActiveTab('goals')}
+          onClick={() => setShowAddGoalModal(true)}
         >
           + Цель
         </Button>
       </div>
 
-      <div className={styles.promptBox}>
-        <Input
-          placeholder="Сформулируй цель или спроси maxOn…"
-          value={prompt}
-          onChange={(event) => setPrompt(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              handlePromptSubmit();
-            }
-          }}
+      {showAddGoalModal && (
+        <AddGoalModal
+          onClose={() => setShowAddGoalModal(false)}
+          onSuccess={() => loadGoals()}
         />
-        <Button
-          mode="secondary"
-          appearance="neutral-themed"
-          onClick={handlePromptSubmit}
-          disabled={!prompt.trim()}
-        >
-          Отправить
-        </Button>
-      </div>
+      )}
+
+      {showAddTaskModal && (
+        <AddTaskModal
+          onClose={() => setShowAddTaskModal(false)}
+          onSuccess={() => loadGoals()}
+          selectedDate={selectedDate}
+        />
+      )}
     </div>
   );
 };

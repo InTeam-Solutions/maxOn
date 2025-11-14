@@ -55,12 +55,24 @@ const HtmlMessage = ({ html }: { html: string }) => {
 };
 
 export const ChatPanel = ({ elevated, onClose }: ChatPanelProps) => {
-  const { messages, isSending, sendMessage } = useChat();
+  const { messages, isSending, sendMessage, sendCallback } = useChat();
   const [draft, setDraft] = useState('');
   const listRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
+    // Auto-scroll to bottom when new messages arrive
+    const scrollToBottom = () => {
+      if (listRef.current) {
+        listRef.current.scrollTo({
+          top: listRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
+    };
+
+    // Small delay to ensure DOM is updated
+    const timeoutId = setTimeout(scrollToBottom, 100);
+    return () => clearTimeout(timeoutId);
   }, [messages]);
 
   const handleSend = async () => {
@@ -71,12 +83,45 @@ export const ChatPanel = ({ elevated, onClose }: ChatPanelProps) => {
   };
 
   const handleButtonClick = async (button: ChatButton) => {
-    // Send button callback_data as a message
+    // Send button callback_data via callback endpoint
     if (!button.callback_data) {
       console.error('[ChatPanel] Button missing callback_data:', button);
       return;
     }
-    await sendMessage(button.callback_data, button.data);
+    await sendCallback(button.callback_data);
+  };
+
+  // Helper function to detect if message requires user action based on content
+  const messageRequiresAction = (message: ChatMessageType): boolean => {
+    if (message.author !== 'maxon') return false;
+    if (message.requiresAction) return true;
+    if (message.buttons && message.buttons.length > 0) return true;
+
+    // Check for question patterns or action requests
+    const text = message.text.toLowerCase();
+    const actionPatterns = [
+      '?', // Contains question mark
+      'когда',
+      'как',
+      'что',
+      'где',
+      'почему',
+      'попробуй',
+      'попробуйте',
+      'переформулиров',
+      'уточни',
+      'уточните',
+      'напиши',
+      'напишите',
+      'скажи',
+      'скажите',
+      'укажи',
+      'укажите',
+      'выбери',
+      'выберите'
+    ];
+
+    return actionPatterns.some(pattern => text.includes(pattern));
   };
 
   return (
@@ -100,7 +145,8 @@ export const ChatPanel = ({ elevated, onClose }: ChatPanelProps) => {
             key={message.id}
             className={clsx(
               styles.bubble,
-              message.author === 'user' ? styles.userBubble : styles.botBubble
+              message.author === 'user' ? styles.userBubble : styles.botBubble,
+              messageRequiresAction(message) && styles.requiresAction
             )}
           >
             {message.isHtml ? (

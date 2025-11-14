@@ -120,6 +120,7 @@ async def get_user_context(user_id: str) -> Dict[str, Any]:
 async def parse_message(message: str, context: Dict[str, Any]) -> Dict[str, Any]:
     """Parse user message via LLM Service"""
     try:
+        logger.info(f"Sending message to LLM for parsing: {message[:100]}")
         response = http_client.post(
             f"{LLM_SERVICE_URL}/api/parse",
             json={"message": message, "context": context}
@@ -128,12 +129,68 @@ async def parse_message(message: str, context: Dict[str, Any]) -> Dict[str, Any]
         # Check if LLM service returned error
         if response.status_code != 200:
             logger.error(f"LLM service error {response.status_code}: {response.text}")
-            return {"intent": None, "error": response.text}
+            # Fallback: check for goal creation patterns
+            return apply_fallback_intent_detection(message)
 
-        return response.json()
+        result = response.json()
+        logger.info(f"LLM parse result: {result}")
+
+        # If LLM returned small_talk with error message, try fallback
+        if (result.get("intent") == "small_talk" and
+            "не могу понять" in result.get("text", "")):
+            logger.info("LLM couldn't parse, trying fallback detection")
+            fallback = apply_fallback_intent_detection(message)
+            if fallback.get("intent") and fallback.get("intent") != "small_talk":
+                return fallback
+
+        return result
     except Exception as e:
         logger.error(f"Failed to parse message: {e}")
-        return {"intent": None, "error": str(e)}
+        # Try fallback detection
+        return apply_fallback_intent_detection(message)
+
+
+def apply_fallback_intent_detection(message: str) -> Dict[str, Any]:
+    """Simple fallback detection for common intents when LLM fails"""
+    message_lower = message.lower()
+
+    # Check for goal creation keywords
+    goal_keywords = [
+        "хочу", "хочется", "я хочу",
+        "планирую", "собираюсь", "буду",
+        "мечтаю", "мечта",
+        "научиться", "научить", "изучить", "освоить",
+        "стать", "начать"
+    ]
+
+    for keyword in goal_keywords:
+        if keyword in message_lower:
+            # Extract goal title from message
+            goal_title = message
+            # Remove common prefixes
+            for prefix in ["я хочу ", "хочу ", "планирую ", "собираюсь ", "мечтаю "]:
+                if message_lower.startswith(prefix):
+                    goal_title = message[len(prefix):]
+                    break
+
+            # Capitalize first letter
+            if goal_title:
+                goal_title = goal_title[0].upper() + goal_title[1:]
+
+            logger.info(f"Fallback detected goal.create: {goal_title}")
+            return {
+                "intent": "goal.create",
+                "goal_title": goal_title,
+                "description": None,
+                "current_level": "начинающий",
+                "time_commitment": "1-2 часа в день"
+            }
+
+    # Default to small_talk if no patterns matched
+    return {
+        "intent": "small_talk",
+        "text": "Извини, не смог распознать твой запрос. Попробуй переформулировать или используй кнопки в меню."
+    }
 
 
 async def execute_intent(intent: str, params: Dict[str, Any], user_id: str) -> Dict[str, Any]:

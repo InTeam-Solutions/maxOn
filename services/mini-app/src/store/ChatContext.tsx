@@ -8,6 +8,7 @@ interface ChatContextValue {
   messages: ChatMessage[];
   isSending: boolean;
   sendMessage: (text: string, context?: ChatContextPayload) => Promise<void>;
+  sendCallback: (callback_data: string) => Promise<void>;
   resetChat: () => void;
 }
 
@@ -26,9 +27,12 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const [isSending, setIsSending] = useState(false);
 
   // Reset chat state on mount to clear any previous dialog state
-  useEffect(() => {
-    apiClient.resetChatState();
-  }, []);
+  // TODO: Uncomment when backend implements /api/reset-state endpoint
+  // useEffect(() => {
+  //   apiClient.resetChatState().catch(() => {
+  //     // Silently ignore if endpoint doesn't exist - not critical
+  //   });
+  // }, []);
 
   const sendMessage = async (text: string, context?: ChatContextPayload) => {
     const trimmed = text.trim();
@@ -55,6 +59,30 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const sendCallback = async (callback_data: string) => {
+    setIsSending(true);
+    try {
+      const reply = await chatService.sendCallbackToBot(callback_data);
+
+      // Replace last bot message with buttons instead of adding new one
+      setMessages((prev) => {
+        const newMessages = Array.isArray(reply) ? reply : [reply];
+
+        // Find last message from bot with buttons
+        const lastBotIndex = prev.length - 1;
+        if (lastBotIndex >= 0 && prev[lastBotIndex].author === 'maxon' && prev[lastBotIndex].buttons) {
+          // Replace the last bot message
+          return [...prev.slice(0, lastBotIndex), ...newMessages];
+        }
+
+        // Otherwise, append as usual
+        return [...prev, ...newMessages];
+      });
+    } finally {
+      setIsSending(false);
+    }
+  };
+
   const resetChat = () => setMessages([welcomeMessage]);
 
   const value = useMemo<ChatContextValue>(
@@ -62,6 +90,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       messages,
       isSending,
       sendMessage,
+      sendCallback,
       resetChat
     }),
     [messages, isSending]

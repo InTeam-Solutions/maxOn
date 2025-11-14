@@ -139,14 +139,15 @@ async function sendRealMessage(
         isHtml: true
       });
 
-      // Additional messages (questions, follow-ups)
+      // Additional messages (questions, follow-ups) - these require user action
       for (let i = 1; i < parts.length; i++) {
         messages.push({
           id: `bot-${generateId()}`,
           author: 'maxon',
           text: parts[i],
           timestamp: dayjs().add(i, 'millisecond').toISOString(), // Slightly offset timestamps
-          isHtml: true
+          isHtml: true,
+          requiresAction: true // Mark follow-up questions as requiring action
         });
       }
 
@@ -188,5 +189,77 @@ export const chatService = {
     }
     console.log('[chatService] Using MOCK API');
     return sendMockMessage(text, context);
+  },
+
+  async sendCallbackToBot(callback_data: string): Promise<ChatMessage | ChatMessage[]> {
+    console.log('[chatService] sendCallbackToBot called:', callback_data);
+    if (!USE_REAL_API) {
+      return sendMockMessage(callback_data);
+    }
+
+    try {
+      const response = await apiClient.sendCallback(callback_data);
+      console.log('[chatService] Callback response:', response);
+
+      let responseText = response.text || response.response || 'Понял!';
+
+      // Normalize buttons
+      let normalizedButtons: ChatButton[][] | undefined = undefined;
+      if (response.buttons) {
+        if (Array.isArray(response.buttons)) {
+          if (response.buttons.length > 0 && Array.isArray(response.buttons[0])) {
+            normalizedButtons = response.buttons as ChatButton[][];
+          } else {
+            normalizedButtons = [response.buttons as ChatButton[]];
+          }
+        }
+      }
+
+      // Handle message splitting
+      if (responseText.includes('---SEPARATE---')) {
+        const parts = responseText.split('---SEPARATE---').map((p: string) => p.trim());
+        const messages: ChatMessage[] = [];
+
+        messages.push({
+          id: `bot-${generateId()}`,
+          author: 'maxon',
+          text: parts[0],
+          timestamp: dayjs().toISOString(),
+          buttons: normalizedButtons,
+          isHtml: true
+        });
+
+        for (let i = 1; i < parts.length; i++) {
+          messages.push({
+            id: `bot-${generateId()}`,
+            author: 'maxon',
+            text: parts[i],
+            timestamp: dayjs().add(i, 'millisecond').toISOString(),
+            isHtml: true,
+            requiresAction: true // Mark follow-up questions as requiring action
+          });
+        }
+
+        return messages;
+      }
+
+      return {
+        id: `bot-${generateId()}`,
+        author: 'maxon',
+        text: responseText,
+        timestamp: dayjs().toISOString(),
+        buttons: normalizedButtons,
+        isHtml: true
+      };
+    } catch (error) {
+      console.error('[chatService] Failed to send callback:', error);
+      return {
+        id: `bot-${generateId()}`,
+        author: 'maxon',
+        text: 'Извини, произошла ошибка. Попробуй позже.',
+        timestamp: dayjs().toISOString(),
+        isHtml: false
+      };
+    }
   }
 };

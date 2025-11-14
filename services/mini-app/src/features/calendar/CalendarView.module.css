@@ -95,6 +95,14 @@
   color: var(--text-secondary);
 }
 
+.actionsRow {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 600px) {
   .agendaItem {
     flex-direction: column;

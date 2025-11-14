@@ -203,6 +203,10 @@ async def parse_message(request: ParseRequest):
         # Render system prompt with context
         system_prompt = render_system_prompt(request.context)
 
+        # Log the request for debugging
+        logger.info(f"[{user_id}] Parsing message: '{request.message}'")
+        logger.debug(f"[{user_id}] Context keys: {list(request.context.keys())}")
+
         # Call OpenAI
         response = openai_client.chat.completions.create(
             model=OPENAI_CHAT_MODEL,
@@ -210,11 +214,22 @@ async def parse_message(request: ParseRequest):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": request.message},
             ],
-            temperature=0.2,
+            temperature=0.4,  # Slightly higher for better understanding
         )
 
         raw = response.choices[0].message.content.strip()
-        result = json.loads(raw)
+        logger.info(f"[{user_id}] Raw LLM response for '{request.message}': {raw}")
+
+        try:
+            result = json.loads(raw)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON from LLM. Raw response: {raw}")
+            logger.error(f"JSON decode error: {e}")
+            # Return a fallback response
+            return {
+                "intent": "small_talk",
+                "text": "Извини, не могу понять запрос. Попробуй переформулировать."
+            }
 
         # Track to Mixpanel
         usage = response.usage

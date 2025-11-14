@@ -74,15 +74,17 @@ export const AppShell = () => {
         </div>
       </div>
       {!isDesktop && isChatOpen && (
-        <div className={styles.mobileChatOverlay}>
-          <div className={styles.chatSheet}>
+        <div className={styles.mobileChatOverlay} onClick={() => setChatOpen(false)}>
+          <div className={styles.chatSheet} onClick={(e) => e.stopPropagation()}>
             <div className={styles.chatSheetHeader}>
-              <span>maxOn</span>
+              <span style={{ fontSize: '16px', fontWeight: 700 }}>maxOn</span>
               <button className={styles.closeButton} onClick={() => setChatOpen(false)}>
                 Закрыть
               </button>
             </div>
-            <ChatPanel onClose={() => setChatOpen(false)} />
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <ChatPanel onClose={() => setChatOpen(false)} />
+            </div>
           </div>
         </div>
       )}

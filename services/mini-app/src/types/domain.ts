@@ -61,5 +61,6 @@ export interface ChatMessage {
   attachments?: ChatAttachment[];
   buttons?: ChatButton[][];
   isHtml?: boolean;
+  requiresAction?: boolean;
 }
 
