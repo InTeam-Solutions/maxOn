@@ -141,18 +141,38 @@ async function sendRealMessage(
 
       // Additional messages (questions, follow-ups) - these require user action
       for (let i = 1; i < parts.length; i++) {
-        messages.push({
+        const text = parts[i];
+        const message: ChatMessage = {
           id: `bot-${generateId()}`,
           author: 'maxon',
-          text: parts[i],
-          timestamp: dayjs().add(i, 'millisecond').toISOString(), // Slightly offset timestamps
+          text: text,
+          timestamp: dayjs().add(i, 'millisecond').toISOString(),
           isHtml: true,
-          requiresAction: true // Mark follow-up questions as requiring action
-        });
+          requiresAction: true
+        };
+
+        // Check if this is asking about schedule/time preferences
+        const isScheduleQuestion = text.toLowerCase().includes('когда') &&
+                                   (text.toLowerCase().includes('удобно') ||
+                                    text.toLowerCase().includes('заниматься') ||
+                                    text.toLowerCase().includes('время'));
+
+        if (isScheduleQuestion) {
+          // Show the week schedule selector for this message
+          message.showScheduleSelector = true;
+        }
+
+        messages.push(message);
       }
 
       return messages;
     }
+
+    // Check if this is asking about schedule/time preferences
+    const isScheduleQuestion = responseText.toLowerCase().includes('когда') &&
+                               (responseText.toLowerCase().includes('удобно') ||
+                                responseText.toLowerCase().includes('заниматься') ||
+                                responseText.toLowerCase().includes('время'));
 
     return {
       id: `bot-${generateId()}`,
@@ -161,7 +181,8 @@ async function sendRealMessage(
       timestamp: dayjs().toISOString(),
       attachments: response.attachments || buildAttachments(context),
       buttons: normalizedButtons,
-      isHtml: true // Orchestrator returns HTML formatted text
+      isHtml: true, // Orchestrator returns HTML formatted text
+      showScheduleSelector: isScheduleQuestion
     };
   } catch (error) {
     console.error('[chatService] Failed to send message to API:', error);

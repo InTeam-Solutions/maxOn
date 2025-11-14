@@ -19,5 +19,6 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
+          railway up --service maxon-api-gateway
           railway up --service maxon-llm
           railway up --service maxon-orchestrator

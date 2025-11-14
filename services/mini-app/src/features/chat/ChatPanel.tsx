@@ -4,6 +4,7 @@ import { Input, Typography } from '@maxhub/max-ui';
 import clsx from 'clsx';
 import { useChat } from '../../store/ChatContext';
 import type { ChatAttachment, ChatButton, ChatMessage as ChatMessageType } from '../../types/domain';
+import { WeekScheduleSelector } from '../../components/WeekScheduleSelector';
 import styles from './ChatPanel.module.css';
 
 interface ChatPanelProps {
@@ -86,9 +87,23 @@ export const ChatPanel = ({ elevated, onClose }: ChatPanelProps) => {
     // Send button callback_data via callback endpoint
     if (!button.callback_data) {
       console.error('[ChatPanel] Button missing callback_data:', button);
+      // If no callback_data, try using the button text as a message instead
+      if (button.text) {
+        await sendMessage(button.text);
+      }
       return;
     }
     await sendCallback(button.callback_data);
+  };
+
+  const handleScheduleSelect = async (selectedDays: number[], preferredTime: string, messageId: string) => {
+    // Format selected days as human-readable string
+    const dayNames = ['понедельникам', 'вторникам', 'средам', 'четвергам', 'пятницам', 'субботам', 'воскресеньям'];
+    const selectedDayNames = selectedDays.map(d => dayNames[d]).join(', ');
+
+    // Send the selection as a message
+    const message = `Мне удобно заниматься по ${selectedDayNames} в ${preferredTime}`;
+    await sendMessage(message);
   };
 
   // Helper function to detect if message requires user action based on content
@@ -163,9 +178,23 @@ export const ChatPanel = ({ elevated, onClose }: ChatPanelProps) => {
             )}
             {message.buttons && message.buttons.length > 0 && (
               <div className={styles.buttons}>
-                {message.buttons.map((row, rowIndex) => (
-                  <ButtonRow key={rowIndex} buttons={row} onButtonClick={handleButtonClick} />
-                ))}
+                {message.buttons.map((row, rowIndex) => {
+                  // Filter out buttons without callback_data
+                  const validButtons = row.filter(btn => btn.callback_data || btn.text);
+                  if (validButtons.length === 0) return null;
+                  return <ButtonRow key={rowIndex} buttons={validButtons} onButtonClick={handleButtonClick} />;
+                })}
+              </div>
+            )}
+            {message.showScheduleSelector && (
+              <div className={styles.scheduleWidget}>
+                <WeekScheduleSelector
+                  onSelect={(days, time) => handleScheduleSelect(days, time, message.id)}
+                  onCancel={() => {
+                    // Optionally handle cancel - send a message like "Пропустить"
+                    sendMessage('Пропустить расписание');
+                  }}
+                />
               </div>
             )}
             <div className={styles.time}>{dayjs(message.timestamp).format('HH:mm')}</div>

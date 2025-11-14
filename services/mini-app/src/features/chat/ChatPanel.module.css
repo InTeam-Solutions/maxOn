@@ -146,6 +146,14 @@
   box-shadow: 0 0 24px rgba(99, 102, 241, 0.25), var(--shadow-md);
 }
 
+/* Schedule Widget */
+.scheduleWidget {
+  margin-top: 16px;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
 /* Attachments */
 .attachments {
   margin-top: 12px;

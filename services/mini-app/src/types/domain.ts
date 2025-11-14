@@ -62,5 +62,10 @@ export interface ChatMessage {
   buttons?: ChatButton[][];
   isHtml?: boolean;
   requiresAction?: boolean;
+  showScheduleSelector?: boolean; // Shows the week schedule selector widget
+  scheduleContext?: {
+    goalTitle?: string;
+    goalId?: string;
+  };
 }
 

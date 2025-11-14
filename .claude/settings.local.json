@@ -66,7 +66,8 @@
       "Bash(railway projects:*)",
       "Bash(railway --help:*)",
       "Bash(railway redeploy --help:*)",
-      "Bash(railway redeploy:*)"
+      "Bash(railway redeploy:*)",
+      "Bash(open \"https://mini-app-alpha-fawn.vercel.app?user_id=89578356\")"
     ],
     "deny": [],
     "ask": []

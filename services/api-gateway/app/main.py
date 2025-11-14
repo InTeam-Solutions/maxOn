@@ -64,7 +64,6 @@ def main_menu_keyboard():
         [("🎯 Мои цели", "show_goals"), ("📅 Календарь", "show_events")],
         [("➕ Новая цель", "new_goal"), ("➕ Событие", "new_event")],
         [("🔗 Мой календарь", "calendar_link")],
-        [("🌐 Открыть WebApp (ТЕСТ)", "open_webapp")],
     ])
 
 
@@ -392,29 +391,6 @@ async def callback_calendar_link(callback: MessageCallback):
     ])
     await callback.message.bot.send_message(
         chat_id=chat_id,
-        text=text,
-        attachments=_attachments(keyboard),
-        parse_mode=ParseMode.HTML,
-    )
-
-
-@dp.message_callback(F.callback.payload == "open_webapp")
-async def callback_open_webapp(callback: MessageCallback):
-    user_id = str(callback.callback.user.user_id)
-    webapp_url = f"https://mini-app-alpha-fawn.vercel.app?user_id={user_id}"
-
-    text = (
-        "🚀 <b>MaxOn Web App (ТЕСТ)</b>\n\n"
-        "Открой приложение в браузере для удобного управления целями и событиями!\n\n"
-        f"👉 <a href=\"{webapp_url}\">Открыть приложение</a>\n\n"
-        f"<code>User ID: {user_id}</code>"
-    )
-
-    keyboard = keyboard_from_pairs([
-        [("🏠 Меню", "main_menu")],
-    ])
-    await callback.message.bot.send_message(
-        chat_id=callback.message.recipient.chat_id,
         text=text,
         attachments=_attachments(keyboard),
         parse_mode=ParseMode.HTML,
