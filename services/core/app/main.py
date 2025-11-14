@@ -479,6 +479,7 @@ class StepStatusUpdate(BaseModel):
 class StepUpdate(BaseModel):
     title: Optional[str] = None
     estimated_hours: Optional[float] = None
+    status: Optional[str] = None  # Add status field
 
 
 @app.put("/api/steps/{step_id}/status", response_model=StepResponse)
@@ -508,17 +509,26 @@ async def update_step_status(step_id: int, update: StepStatusUpdate):
 
 @app.put("/api/steps/{step_id}", response_model=StepResponse)
 async def update_step(step_id: int, user_id: str, update: StepUpdate):
-    """Update step title and/or estimated hours"""
+    """Update step title, estimated hours, and/or status"""
     try:
         db = get_db()
         with db.session_ctx() as session:
-            result = goals_service.update_step(
-                session=session,
-                step_id=step_id,
-                user_id=user_id,
-                title=update.title,
-                estimated_hours=update.estimated_hours
-            )
+            # If status is being updated, use update_step_status
+            if update.status is not None:
+                result = goals_service.update_step_status(
+                    session=session,
+                    step_id=step_id,
+                    user_id=user_id,
+                    status=update.status
+                )
+            else:
+                result = goals_service.update_step(
+                    session=session,
+                    step_id=step_id,
+                    user_id=user_id,
+                    title=update.title,
+                    estimated_hours=update.estimated_hours
+                )
 
         if not result:
             raise HTTPException(status_code=404, detail="Step not found")
