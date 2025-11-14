@@ -37,12 +37,15 @@ export const GoalsView = () => {
       const data = await apiClient.getGoals();
 
       // Transform API response to match UI format
+      console.log('[GoalsView] Raw API data:', data);
+      console.log('[GoalsView] First goal steps from API:', data[0]?.steps);
+
       const transformedGoals: Goal[] = data.map((g: any) => ({
         id: String(g.id),
         title: g.title,
         description: g.description || '',
         targetDate: g.target_date || new Date().toISOString(),
-        progress: calculateProgress(g.steps || []),
+        progress: Math.round(g.progress_percent || 0),
         category: g.category || 'Общее',
         priority: g.priority || 'medium',
         status: g.status || 'active',
@@ -56,14 +59,15 @@ export const GoalsView = () => {
         }))
       }));
 
+      console.log('[GoalsView] Transformed goals:', transformedGoals);
+      console.log('[GoalsView] Steps status:', transformedGoals[0]?.steps.map(s => ({ id: s.id, status: s.status, completed: s.completed })));
+
       setGoals(transformedGoals);
 
       // If goal was deleted and we're not preserving selection, select first goal
       if (!preserveSelection && transformedGoals.length > 0) {
         selectGoal(transformedGoals[0].id);
       }
-
-      console.log('[GoalsView] Loaded goals:', transformedGoals);
     } catch (err) {
       console.error('[GoalsView] Failed to load goals:', err);
       setError('Не удалось загрузить цели');

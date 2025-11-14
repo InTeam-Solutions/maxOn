@@ -13,12 +13,15 @@ const ACCENT_MAP = {
   violet: 'var(--accent-violet)'
 } as const;
 
-export const ProgressBar = ({ value, accent = 'green', compact }: ProgressBarProps) => (
-  <div className={clsx(styles.track, compact && styles.compact)}>
-    <div
-      className={styles.fill}
-      style={{ width: `${value}%`, background: ACCENT_MAP[accent] }}
-    />
-  </div>
-);
+export const ProgressBar = ({ value, accent = 'green', compact }: ProgressBarProps) => {
+  console.log('[ProgressBar] Rendering with value:', value, 'accent:', accent);
+  return (
+    <div className={clsx(styles.track, compact && styles.compact)}>
+      <div
+        className={styles.fill}
+        style={{ width: `${value}%`, background: ACCENT_MAP[accent] }}
+      />
+    </div>
+  );
+};
 

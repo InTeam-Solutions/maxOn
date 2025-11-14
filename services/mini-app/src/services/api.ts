@@ -46,6 +46,10 @@ class ApiClient {
   // ==================== Goals API ====================
 
   async getGoals(): Promise<Goal[]> {
+    console.log('[API] getGoals - userId:', this.userId);
+    console.log('[API] getGoals - coreUrl:', this.coreUrl);
+    console.log('[API] getGoals - full URL:', `${this.coreUrl}/api/goals?user_id=${this.userId}`);
+
     const result = await this.request<Goal[]>(
       `${this.coreUrl}/api/goals?user_id=${this.userId}`
     );
@@ -185,6 +189,15 @@ class ApiClient {
         user_id: this.userId  // Add user_id to request body
       }),
     });
+  }
+
+  async deleteEvent(eventId: string): Promise<void> {
+    await this.request<void>(
+      `${this.coreUrl}/api/events/${eventId}?user_id=${this.userId}`,
+      {
+        method: 'DELETE',
+      }
+    );
   }
 
   // ==================== Orchestrator API (Chat) ====================

@@ -24,33 +24,45 @@ export const GoalDetails = ({ goal, onGoalUpdated, onGoalDeleted }: GoalDetailsP
 
   useEffect(() => {
     setSteps(goal.steps);
-  }, [goal]);
+  }, [goal.id]); // Only reset steps when goal ID changes, not on every goal update
 
   const toggleStep = async (step: GoalStep) => {
     const newStatus = step.completed ? 'pending' : 'completed';
 
+    // Optimistically update UI immediately
+    setSteps((prev) =>
+      prev.map((s) =>
+        s.id === step.id ? { ...s, completed: newStatus === 'completed', status: newStatus } : s
+      )
+    );
+
     try {
+      console.log('[GoalDetails] Toggling step:', step.id, 'from', step.status, 'to', newStatus);
       // Update in API
-      await apiClient.updateStep(step.id, { status: newStatus });
+      const response = await apiClient.updateStep(step.id, { status: newStatus });
+      console.log('[GoalDetails] Step updated successfully, response:', response);
+      console.log('[GoalDetails] Response status field:', response.status);
 
-      // Update local state
-      setSteps((prev) =>
-        prev.map((s) =>
-          s.id === step.id ? { ...s, completed: !s.completed } : s
-        )
-      );
-
-      // Notify parent to refresh
-      onGoalUpdated?.();
+      // Refresh parent to update goal progress - but do it after a delay
+      // to give backend time to process the update
+      setTimeout(() => {
+        console.log('[GoalDetails] Calling onGoalUpdated to refresh progress');
+        onGoalUpdated?.();
+      }, 500);
     } catch (err) {
       console.error('[GoalDetails] Failed to toggle step:', err);
       alert('Не удалось обновить шаг');
+
+      // Revert optimistic update on error
+      setSteps((prev) =>
+        prev.map((s) =>
+          s.id === step.id ? { ...s, completed: step.completed, status: step.status } : s
+        )
+      );
     }
   };
 
   const handleDeleteStep = async (stepId: string) => {
-    if (!confirm('Удалить этот шаг?')) return;
-
     setDeletingStepId(stepId);
     try {
       await apiClient.deleteStep(stepId);
@@ -69,8 +81,6 @@ export const GoalDetails = ({ goal, onGoalUpdated, onGoalDeleted }: GoalDetailsP
   };
 
   const handleDeleteGoal = async () => {
-    if (!confirm(`Удалить цель "${goal.title}"? Это действие нельзя отменить.`)) return;
-
     try {
       await apiClient.deleteGoal(goal.id);
       onGoalDeleted?.();

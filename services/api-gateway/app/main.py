@@ -71,7 +71,7 @@ def main_menu_keyboard():
     return keyboard_from_pairs([
         [("🎯 Мои цели", "show_goals"), ("📅 Календарь", "show_events")],
         [("📊 Статистика", "show_stats"), ("🏆 Лидерборд", "leaderboard")],
-        [("🗓 Расписание", "calendar_view_week"), ("🔗 Подписка", "calendar_link")],
+        [("🗓 Расписание", "calendar_view_week"), ("🔗 Подписка на наш календарь", "calendar_link")],
         [("➕ Новая цель", "new_goal"), ("➕ Событие", "new_event")],
     ])
 
@@ -375,7 +375,7 @@ def calendar_view_keyboard(active: str):
             CallbackButton(text="➕ Событие", payload="new_event"),
             CallbackButton(text="🏠 Меню", payload="main_menu"),
         ],
-        [CallbackButton(text="🔗 Подписка", payload="calendar_link")],
+        [CallbackButton(text="🔗 Подписка на наш календарь", payload="calendar_link")],
     ]
     return build_inline_keyboard([filter_row, *action_rows])
 
@@ -1155,7 +1155,7 @@ async def callback_scheduling(callback: MessageCallback):
             current_row: List[CallbackButton] = []
             for btn in buttons_data:
                 current_row.append(
-                    CallbackButton(text=btn["text"], payload=btn["callback"])
+                    CallbackButton(text=btn["text"], payload=btn["callback_data"])
                 )
                 if len(current_row) >= row_size:
                     rows.append(current_row)
@@ -1308,16 +1308,26 @@ async def handle_user_message(event: MessageCreated, text_override: Optional[str
         response_type = result.get("response_type", "text")
         text = result.get("text")
 
+        # Check if text contains separator and split into multiple messages
+        separator = "━━━━━━━━━━━━━━━"
+        messages = text.split(f"\n\n{separator}\n\n") if separator in text else [text]
+
         if response_type == "inline_buttons":
             buttons_data = result.get("buttons", [])
             if buttons_data:
                 rows = [
-                    [CallbackButton(text=btn["text"], payload=btn["callback"])]
+                    [CallbackButton(text=btn["text"], payload=btn["callback_data"])]
                     for btn in buttons_data
                 ]
                 keyboard = build_inline_keyboard(rows)
+
+                # Send all messages except the last one without buttons
+                for msg in messages[:-1]:
+                    await event.message.answer(msg, parse_mode=ParseMode.HTML)
+
+                # Send the last message with buttons
                 await event.message.answer(
-                    text,
+                    messages[-1],
                     attachments=_attachments(keyboard),
                     parse_mode=ParseMode.HTML
                 )
@@ -1353,7 +1363,9 @@ async def handle_user_message(event: MessageCreated, text_override: Optional[str
                 else:
                     await event.message.answer("Результаты найдены, но формат не поддерживается.")
         elif text:
-            await event.message.answer(text)
+            # Send all split messages
+            for msg in messages:
+                await event.message.answer(msg, parse_mode=ParseMode.HTML)
 
     except httpx.TimeoutException:
         logger.error(f"[{user_id}] Request timeout")
@@ -1424,25 +1436,9 @@ async def on_startup():
     await bot.set_my_commands(*commands)
     logger.info("✅ Bot commands menu set")
 
-    # Set menu button with text
-    try:
-        telegram_api_url = f"https://api.telegram.org/bot{BOT_TOKEN}/setChatMenuButton"
-        menu_button_payload = {
-            "menu_button": {
-                "type": "web_app",
-                "text": "Открыть",
-                "web_app": {
-                    "url": "https://mini-app-alpha-fawn.vercel.app"
-                }
-            }
-        }
-        response = await http_client.post(telegram_api_url, json=menu_button_payload)
-        if response.status_code == 200:
-            logger.info("✅ Menu button set to 'Открыть'")
-        else:
-            logger.warning(f"⚠️ Failed to set menu button: {response.text}")
-    except Exception as e:
-        logger.warning(f"⚠️ Cannot set menu button: {e}")
+    # TODO: Set menu button text when MAX API supports setChatMenuButton
+    # MAX API currently doesn't support setChatMenuButton method from Telegram Bot API
+    # This feature needs to be configured through https://dev.max.ru admin panel
 
 
 async def on_shutdown():

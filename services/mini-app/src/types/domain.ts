@@ -4,6 +4,7 @@ export interface GoalStep {
   id: string;
   title: string;
   completed: boolean;
+  status?: string; // Backend status: 'pending' | 'in_progress' | 'completed'
 }
 
 export interface Goal {

@@ -24,6 +24,11 @@
   --accent-warning: #F59E0B;
   --accent-danger: #EF4444;
 
+  /* Named accent colors for components */
+  --accent-green: #10B981;
+  --accent-blue: #6366F1;
+  --accent-violet: #8B5CF6;
+
   /* Gradients */
   --gradient-primary: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
   --gradient-glow: radial-gradient(circle at center, rgba(99, 102, 241, 0.15), transparent 70%);

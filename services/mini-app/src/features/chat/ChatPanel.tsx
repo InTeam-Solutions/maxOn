@@ -153,13 +153,13 @@ export const ChatPanel = ({ elevated, onClose }: ChatPanelProps) => {
   };
 
   const handleMultiSelectConfirm = async (selectedCallbacks: string[]) => {
-    // Send all selected callbacks as a combined message
-    // Format: "time_pref:afternoon,evening:27" or send multiple callbacks
+    // Send selected callbacks individually to the backend
     if (selectedCallbacks.length === 0) return;
 
-    // Combine all selections into one callback
-    const combined = selectedCallbacks.join(',');
-    await sendCallback(combined);
+    // Send each callback individually in sequence
+    for (const callback of selectedCallbacks) {
+      await sendCallback(callback);
+    }
   };
 
   // Detect if message requires multi-select based on text or button patterns
@@ -173,7 +173,7 @@ export const ChatPanel = ({ elevated, onClose }: ChatPanelProps) => {
       return true;
     }
 
-    // Check button patterns (time_pref, day_select, etc.)
+    // Check button patterns (time_pref, day_select, day_pref, etc.)
     if (message.buttons && message.buttons.length > 0) {
       const firstRow = message.buttons[0];
       if (firstRow.length > 0 && firstRow[0].callback_data) {
@@ -181,6 +181,7 @@ export const ChatPanel = ({ elevated, onClose }: ChatPanelProps) => {
         // Patterns that typically allow multi-select
         if (callback.startsWith('time_pref:') ||
             callback.startsWith('day_select:') ||
+            callback.startsWith('day_pref:') ||
             callback.startsWith('weekday:')) {
           return true;
         }
@@ -270,27 +271,51 @@ export const ChatPanel = ({ elevated, onClose }: ChatPanelProps) => {
                 ))}
               </div>
             )}
-            {message.buttons && message.buttons.length > 0 && (
-              <div className={styles.buttons}>
-                {message.buttons.map((row, rowIndex) => {
-                  // Filter out buttons without callback_data
-                  const validButtons = row.filter(btn => btn.callback_data || btn.text);
-                  if (validButtons.length === 0) return null;
+            {message.buttons && message.buttons.length > 0 && (() => {
+              // Flatten all button rows into a single array
+              const allButtons = message.buttons.flat().filter(btn => btn.callback_data || btn.text);
+              if (allButtons.length === 0) return null;
 
-                  const multiSelect = isMultiSelectMessage(message);
+              const multiSelect = isMultiSelectMessage(message);
 
-                  return (
-                    <ButtonRow
-                      key={rowIndex}
-                      buttons={validButtons}
-                      onButtonClick={handleButtonClick}
-                      multiSelect={multiSelect}
-                      onConfirmSelection={multiSelect ? handleMultiSelectConfirm : undefined}
-                    />
-                  );
-                })}
-              </div>
-            )}
+              // If multiSelect, filter out backend's "Готово" button and use it as confirmation callback
+              let confirmCallback: string | undefined;
+              let selectableButtons = allButtons;
+
+              if (multiSelect) {
+                // Find and extract the "Готово" button from backend
+                const doneButton = allButtons.find(btn =>
+                  btn.text.includes('Готово') ||
+                  btn.callback_data?.includes('_done') ||
+                  btn.callback_data?.includes('time_pref_done') ||
+                  btn.callback_data?.includes('day_pref_done')
+                );
+
+                if (doneButton) {
+                  confirmCallback = doneButton.callback_data;
+                  // Remove the backend's "Готово" button from selectable buttons
+                  selectableButtons = allButtons.filter(btn => btn !== doneButton);
+                }
+              }
+
+              return (
+                <div className={styles.buttons}>
+                  <ButtonRow
+                    buttons={selectableButtons}
+                    onButtonClick={handleButtonClick}
+                    multiSelect={multiSelect}
+                    onConfirmSelection={multiSelect ? async (selected) => {
+                      // First send all selected callbacks
+                      await handleMultiSelectConfirm(selected);
+                      // Then send the confirmation callback if available
+                      if (confirmCallback) {
+                        await sendCallback(confirmCallback);
+                      }
+                    } : undefined}
+                  />
+                </div>
+              );
+            })()}
             {message.showScheduleSelector && (
               <div className={styles.scheduleWidget}>
                 <WeekScheduleSelector

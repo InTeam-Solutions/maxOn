@@ -28,13 +28,27 @@ export const CalendarView = () => {
   const [visibleMonth, setVisibleMonth] = useState(dayjs(selectedDate).startOf('month'));
   const [completedTasks, setCompletedTasks] = useState<Record<string, boolean>>({});
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddEventModal, setShowAddEventModal] = useState(false);
 
-  // Load goals from API
+  // Load goals and events from API
   useEffect(() => {
     loadGoals();
+    loadEvents();
   }, []);
+
+  const loadEvents = async () => {
+    try {
+      console.log('[CalendarView] Loading events for user:', apiClient.getUserId());
+      const data = await apiClient.getEvents();
+      console.log('[CalendarView] Events API response:', data);
+      setEvents(data || []);
+    } catch (err) {
+      console.error('[CalendarView] Failed to load events:', err);
+      setEvents([]);
+    }
+  };
 
   const loadGoals = async () => {
     try {
@@ -49,7 +63,7 @@ export const CalendarView = () => {
         title: g.title,
         description: g.description || '',
         targetDate: g.target_date || new Date().toISOString(),
-        progress: g.progress_percent || 0,
+        progress: Math.round(g.progress_percent || 0),
         category: g.category || 'Общее',
         priority: g.priority || 'medium',
         status: g.status || 'active',
@@ -73,8 +87,28 @@ export const CalendarView = () => {
     }
   };
 
+  // Convert events to Task format
+  const eventTasks = useMemo(() => {
+    return events.map((event) => ({
+      id: `event-${event.id}`,
+      title: event.title,
+      goalId: '', // Events don't belong to goals
+      goalTitle: event.notes ? 'Событие' : 'Событие',
+      dueDate: event.time
+        ? dayjs(`${event.date}T${event.time}`).toISOString()
+        : dayjs(event.date).toISOString(),
+      status: 'scheduled' as const,
+      focusArea: 'События',
+      isEvent: true, // Flag to distinguish events from goal tasks
+      eventData: event // Store original event data
+    }));
+  }, [events]);
+
   // Extract tasks from goals (steps with planned_date)
-  const allTasks = useMemo(() => extractTasksFromGoals(goals), [goals]);
+  const goalTasks = useMemo(() => extractTasksFromGoals(goals), [goals]);
+
+  // Combine events and goal tasks
+  const allTasks = useMemo(() => [...eventTasks, ...goalTasks], [eventTasks, goalTasks]);
 
   const tasksByDate = useMemo(() => groupTasksByDate(allTasks), [allTasks]);
 
@@ -82,14 +116,32 @@ export const CalendarView = () => {
   const monthDays = generateMonthGrid(visibleMonth);
 
   const handleTaskAction = async (task: Task, action: 'complete' | 'goal' | 'chat' | 'delete') => {
+    const isEvent = (task as any).isEvent;
+
     if (action === 'complete') {
+      if (isEvent) {
+        alert('События нельзя отмечать как выполненные');
+        return;
+      }
       // Toggle step completion status
       const newStatus = completedTasks[task.id] ? 'pending' : 'completed';
       try {
+        console.log('[CalendarView] Updating step status:', task.id, newStatus);
         await apiClient.updateStep(task.id, { status: newStatus });
-        setCompletedTasks((prev) => ({ ...prev, [task.id]: !prev[task.id] }));
-        // Reload goals to update task list
-        loadGoals();
+        console.log('[CalendarView] Step status updated successfully');
+
+        // Update local state immediately for better UX
+        setCompletedTasks((prev) => ({ ...prev, [task.id]: newStatus === 'completed' }));
+
+        // Update the goals state locally instead of reloading from API
+        setGoals((prevGoals) =>
+          prevGoals.map(goal => ({
+            ...goal,
+            steps: goal.steps?.map(step =>
+              step.id === task.id ? { ...step, status: newStatus, completed: newStatus === 'completed' } : step
+            )
+          }))
+        );
       } catch (err) {
         console.error('[CalendarView] Failed to toggle step:', err);
         alert('Не удалось обновить задачу');
@@ -97,29 +149,49 @@ export const CalendarView = () => {
       return;
     }
     if (action === 'goal') {
+      if (isEvent) {
+        alert('Это событие, оно не связано с целью');
+        return;
+      }
       selectGoal(task.goalId);
       setActiveTab('goals');
       return;
     }
     if (action === 'chat') {
       setChatOpen(true);
-      void sendMessage(`Что с задачей ${task.title}?`, {
-        type: 'task',
+      void sendMessage(`Что с ${isEvent ? 'событием' : 'задачей'} ${task.title}?`, {
+        type: 'task', // Keep as 'task' for now, backend doesn't distinguish
         title: task.title,
         dueDate: task.dueDate
       });
       return;
     }
     if (action === 'delete') {
-      if (!confirm(`Удалить задачу "${task.title}"?`)) return;
-
       try {
-        await apiClient.deleteStep(task.id);
-        // Reload goals to update task list
-        loadGoals();
-      } catch (err) {
-        console.error('[CalendarView] Failed to delete step:', err);
-        alert('Не удалось удалить задачу');
+        if (isEvent) {
+          // Extract event ID from task ID (format: "event-{id}")
+          const eventId = task.id.replace('event-', '');
+          await apiClient.deleteEvent(eventId);
+          // Reload events to update list
+          loadEvents();
+        } else {
+          await apiClient.deleteStep(task.id);
+          // Reload goals to update task list
+          loadGoals();
+        }
+      } catch (err: any) {
+        console.error('[CalendarView] Failed to delete:', err);
+        if (err.message?.includes('404')) {
+          alert('Событие уже было удалено');
+          // Reload to sync state
+          if (isEvent) {
+            loadEvents();
+          } else {
+            loadGoals();
+          }
+        } else {
+          alert('Не удалось удалить: ' + (err.message || 'Неизвестная ошибка'));
+        }
       }
     }
   };
@@ -460,7 +532,7 @@ export const CalendarView = () => {
       {showAddEventModal && (
         <AddEventModal
           onClose={() => setShowAddEventModal(false)}
-          onSuccess={() => loadGoals()}
+          onSuccess={() => loadEvents()}
           selectedDate={selectedDate}
         />
       )}

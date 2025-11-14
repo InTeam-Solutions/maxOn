@@ -42,11 +42,18 @@
   border: var(--border-subtle);
   background: var(--bg-subtle);
   padding: 12px 6px;
+  height: 70px;
+  box-sizing: border-box;
   color: var(--text-muted);
   cursor: pointer;
   transition: all var(--transition-base);
   position: relative;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 2px;
 }
 
 .calendarDay::before {
@@ -75,15 +82,11 @@
   opacity: 1;
 }
 
-.calendarDay.today {
-  position: relative;
-}
-
 .calendarDay.today::after {
   content: '';
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 6px;
+  right: 6px;
   width: 6px;
   height: 6px;
   background: var(--accent-success);
@@ -110,18 +113,15 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 500;
-  position: relative;
   z-index: 1;
-  transition: all var(--transition-base);
+  line-height: 1;
 }
 
 .calendarDate {
   font-size: 20px;
   font-weight: 700;
-  margin-top: 4px;
-  position: relative;
   z-index: 1;
-  transition: all var(--transition-base);
+  line-height: 1;
 }
 
 .calendarDot {
@@ -130,9 +130,11 @@
   border-radius: 50%;
   background: var(--accent-primary);
   display: block;
-  margin: 8px auto 0;
   box-shadow: 0 0 8px rgba(99, 102, 241, 0.6);
-  position: relative;
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 1;
 }
 

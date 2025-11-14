@@ -74,7 +74,12 @@
       "Bash(open \"https://github.com/orgs/InTeam-Solutions/packages/container/package/maxon-llm\")",
       "Bash(open \"https://github.com/orgs/InTeam-Solutions/packages/container/package/maxon-orchestrator\")",
       "Bash(git pull:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(gh run:*)",
+      "Bash(open \"https://railway.app/project/exciting-trust\")",
+      "Bash(xargs -I {} curl -s \"https://mini-jcsl877vi-0stg0ts-projects.vercel.app/assets/{}\")",
+      "Bash(find:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

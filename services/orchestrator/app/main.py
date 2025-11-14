@@ -691,7 +691,7 @@ async def handle_scheduling_flow(user_id: str, message: str, current_state: str,
 
         # Update goal with deadline in database
         try:
-            update_response = http_client.patch(
+            update_response = http_client.put(
                 f"{CORE_SERVICE_URL}/api/goals/{goal_id}",
                 params={"user_id": user_id},
                 json={"target_date": deadline}
@@ -936,7 +936,7 @@ async def process_message(request: ProcessMessageRequest):
                         goal_text += f"\n💬 {smart_analysis.get('motivational_message', '')}"
 
                     # Separate deadline question as a distinct message
-                    goal_text += "\n\n---SEPARATE---\n\n"
+                    goal_text += "\n\n━━━━━━━━━━━━━━━\n\n"
                     goal_text += "📅 <b>Когда ты хочешь достичь этой цели?</b>\n\n"
                     goal_text += "Укажи дедлайн, например:\n"
                     goal_text += "• 'через 2 недели'\n"
@@ -1171,7 +1171,7 @@ async def process_message(request: ProcessMessageRequest):
                     goal_text += f"... и ещё {len(steps) - 3}"
 
             # Separate deadline question as a distinct message
-            goal_text += "\n\n---SEPARATE---\n\n"
+            goal_text += "\n\n━━━━━━━━━━━━━━━\n\n"
             goal_text += "📅 <b>Когда ты хочешь достичь этой цели?</b>\n\n"
             goal_text += "Укажи дедлайн, например:\n"
             goal_text += "• 'через 2 недели'\n"

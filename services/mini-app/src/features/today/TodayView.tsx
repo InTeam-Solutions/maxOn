@@ -19,8 +19,8 @@ import styles from './TodayView.module.css';
 
 const buildMiniCalendar = (date: string) => {
   const center = dayjs(date);
-  const start = center.subtract(3, 'day');
-  return Array.from({ length: 7 }, (_, index) => start.add(index, 'day'));
+  const start = center.subtract(2, 'day');
+  return Array.from({ length: 5 }, (_, index) => start.add(index, 'day'));
 };
 
 export const TodayView = () => {
@@ -28,14 +28,28 @@ export const TodayView = () => {
   const { sendMessage } = useChat();
   const [prompt, setPrompt] = useState('');
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddGoalModal, setShowAddGoalModal] = useState(false);
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
 
-  // Load goals from API
+  // Load goals and events from API
   useEffect(() => {
     loadGoals();
+    loadEvents();
   }, []);
+
+  const loadEvents = async () => {
+    try {
+      console.log('[TodayView] Loading events for user:', apiClient.getUserId());
+      const data = await apiClient.getEvents();
+      console.log('[TodayView] Events API response:', data);
+      setEvents(data || []);
+    } catch (err) {
+      console.error('[TodayView] Failed to load events:', err);
+      setEvents([]);
+    }
+  };
 
   const loadGoals = async () => {
     try {
@@ -48,7 +62,7 @@ export const TodayView = () => {
         title: g.title,
         description: g.description || '',
         targetDate: g.target_date || new Date().toISOString(),
-        progress: g.progress_percent || 0,
+        progress: Math.round(g.progress_percent || 0),
         category: g.category || 'Общее',
         priority: g.priority || 'medium',
         status: g.status || 'active',
@@ -77,8 +91,28 @@ export const TodayView = () => {
     }
   };
 
+  // Convert events to Task format
+  const eventTasks = useMemo(() => {
+    return events.map((event) => ({
+      id: `event-${event.id}`,
+      title: event.title,
+      goalId: '', // Events don't belong to goals
+      goalTitle: 'Событие',
+      dueDate: event.time
+        ? dayjs(`${event.date}T${event.time}`).toISOString()
+        : dayjs(event.date).toISOString(),
+      status: 'scheduled' as const,
+      focusArea: 'События',
+      isEvent: true,
+      eventData: event
+    }));
+  }, [events]);
+
   // Extract tasks from goals (steps with planned_date)
-  const allTasks = useMemo(() => extractTasksFromGoals(goals), [goals]);
+  const goalTasks = useMemo(() => extractTasksFromGoals(goals), [goals]);
+
+  // Combine events and goal tasks
+  const allTasks = useMemo(() => [...eventTasks, ...goalTasks], [eventTasks, goalTasks]);
 
   const tasksToday = useMemo(() => getTodayTasks(allTasks), [allTasks]);
 
@@ -90,21 +124,44 @@ export const TodayView = () => {
   const activeGoalsCount = goals.filter(g => g.status === 'active').length;
   const stepsToday = tasksToday.length;
 
-  const handleTaskClick = (goalId: string) => {
-    selectGoal(goalId);
+  const handleTaskClick = (task: Task) => {
+    const isEvent = (task as any).isEvent;
+    if (isEvent) {
+      alert('Это событие, оно не связано с целью. Откройте календарь для подробностей.');
+      return;
+    }
+    selectGoal(task.goalId);
     setActiveTab('goals');
   };
 
   const handleDeleteTask = async (task: Task) => {
-    if (!confirm(`Удалить задачу "${task.title}"?`)) return;
+    const isEvent = (task as any).isEvent;
 
     try {
-      await apiClient.deleteStep(task.id);
-      // Reload goals to update task list
-      loadGoals();
-    } catch (err) {
-      console.error('[TodayView] Failed to delete task:', err);
-      alert('Не удалось удалить задачу');
+      if (isEvent) {
+        // Extract event ID from task ID (format: "event-{id}")
+        const eventId = task.id.replace('event-', '');
+        await apiClient.deleteEvent(eventId);
+        // Reload events to update list
+        loadEvents();
+      } else {
+        await apiClient.deleteStep(task.id);
+        // Reload goals to update task list
+        loadGoals();
+      }
+    } catch (err: any) {
+      console.error('[TodayView] Failed to delete:', err);
+      if (err.message?.includes('404')) {
+        alert('Событие уже было удалено');
+        // Reload to sync state
+        if (isEvent) {
+          loadEvents();
+        } else {
+          loadGoals();
+        }
+      } else {
+        alert('Не удалось удалить: ' + (err.message || 'Неизвестная ошибка'));
+      }
     }
   };
 
@@ -165,7 +222,7 @@ export const TodayView = () => {
               >
                 <span className={styles.calendarWeekday}>{day.format('dd')}</span>
                 <span className={styles.calendarDate}>{day.format('D')}</span>
-                {hasTasks ? <span className={styles.calendarDot} /> : null}
+                <span className={styles.calendarDot} style={{ opacity: hasTasks ? 1 : 0 }} />
               </button>
             );
           })}
@@ -179,7 +236,7 @@ export const TodayView = () => {
             <TaskCard
               key={task.id}
               task={task}
-              onClick={() => handleTaskClick(task.goalId)}
+              onClick={() => handleTaskClick(task)}
               onDelete={handleDeleteTask}
             />
           ))}
@@ -197,7 +254,7 @@ export const TodayView = () => {
               key={task.id}
               task={task}
               accent="violet"
-              onClick={() => handleTaskClick(task.goalId)}
+              onClick={() => handleTaskClick(task)}
               onDelete={handleDeleteTask}
             />
           ))}
