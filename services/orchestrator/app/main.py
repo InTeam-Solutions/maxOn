@@ -876,9 +876,11 @@ async def process_message(request: ProcessMessageRequest):
                             emoji = "✅" if data.get("passed") else "⚠️"
                             goal_text += f"{emoji} <b>{key.upper()}</b>: {data.get('feedback', '')}\n"
 
-                        goal_text += f"\n💬 {smart_analysis.get('motivational_message', '')}\n\n"
+                        goal_text += f"\n💬 {smart_analysis.get('motivational_message', '')}"
 
-                    goal_text += "📅 <b>Когда ты хочешь достичь этой цели?</b>\n"
+                    # Separate deadline question as a distinct message
+                    goal_text += "\n\n---SEPARATE---\n\n"
+                    goal_text += "📅 <b>Когда ты хочешь достичь этой цели?</b>\n\n"
                     goal_text += "Укажи дедлайн, например:\n"
                     goal_text += "• 'через 2 недели'\n"
                     goal_text += "• '15 декабря'\n"
@@ -1109,10 +1111,11 @@ async def process_message(request: ProcessMessageRequest):
                 for i, step in enumerate(steps[:3], 1):
                     goal_text += f"{i}. {step['title']}\n"
                 if len(steps) > 3:
-                    goal_text += f"... и ещё {len(steps) - 3}\n"
-                goal_text += "\n"
+                    goal_text += f"... и ещё {len(steps) - 3}"
 
-            goal_text += "📅 <b>Когда ты хочешь достичь этой цели?</b>\n"
+            # Separate deadline question as a distinct message
+            goal_text += "\n\n---SEPARATE---\n\n"
+            goal_text += "📅 <b>Когда ты хочешь достичь этой цели?</b>\n\n"
             goal_text += "Укажи дедлайн, например:\n"
             goal_text += "• 'через 2 недели'\n"
             goal_text += "• '15 декабря'\n"

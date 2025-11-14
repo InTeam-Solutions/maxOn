@@ -92,7 +92,7 @@ async function sendMockMessage(
 async function sendRealMessage(
   text: string,
   context?: ChatContextPayload
-): Promise<ChatMessage> {
+): Promise<ChatMessage | ChatMessage[]> {
   try {
     const response = await apiClient.sendMessage(text, context);
 
@@ -123,6 +123,36 @@ async function sendRealMessage(
       }
     }
 
+    // Check if response contains multiple messages separated by ---SEPARATE---
+    if (responseText.includes('---SEPARATE---')) {
+      const parts = responseText.split('---SEPARATE---').map(p => p.trim());
+      const messages: ChatMessage[] = [];
+
+      // First message with attachments and buttons
+      messages.push({
+        id: `bot-${generateId()}`,
+        author: 'maxon',
+        text: parts[0],
+        timestamp: dayjs().toISOString(),
+        attachments: response.attachments || buildAttachments(context),
+        buttons: normalizedButtons,
+        isHtml: true
+      });
+
+      // Additional messages (questions, follow-ups)
+      for (let i = 1; i < parts.length; i++) {
+        messages.push({
+          id: `bot-${generateId()}`,
+          author: 'maxon',
+          text: parts[i],
+          timestamp: dayjs().add(i, 'millisecond').toISOString(), // Slightly offset timestamps
+          isHtml: true
+        });
+      }
+
+      return messages;
+    }
+
     return {
       id: `bot-${generateId()}`,
       author: 'maxon',
@@ -150,7 +180,7 @@ export const chatService = {
   async sendMessageToBot(
     text: string,
     context?: ChatContextPayload
-  ): Promise<ChatMessage> {
+  ): Promise<ChatMessage | ChatMessage[]> {
     console.log('[chatService] sendMessageToBot called, USE_REAL_API:', USE_REAL_API);
     if (USE_REAL_API) {
       console.log('[chatService] Using REAL API');

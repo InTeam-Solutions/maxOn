@@ -44,7 +44,12 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     setIsSending(true);
     try {
       const reply = await chatService.sendMessageToBot(trimmed, context);
-      setMessages((prev) => [...prev, reply]);
+      // Handle both single message and array of messages
+      if (Array.isArray(reply)) {
+        setMessages((prev) => [...prev, ...reply]);
+      } else {
+        setMessages((prev) => [...prev, reply]);
+      }
     } finally {
       setIsSending(false);
     }
