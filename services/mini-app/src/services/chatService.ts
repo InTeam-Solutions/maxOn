@@ -13,6 +13,13 @@ export interface ChatContextPayload {
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
 
+// Debug logging
+console.log('[chatService] Environment:', {
+  VITE_USE_REAL_API: import.meta.env.VITE_USE_REAL_API,
+  USE_REAL_API,
+  ORCHESTRATOR_URL: import.meta.env.VITE_ORCHESTRATOR_API_URL
+});
+
 // Fallback responses for mock mode
 const BOT_RESPONSES = [
   'Я рядом — могу подсказать следующий шаг или собрать краткий план.',
@@ -129,9 +136,12 @@ export const chatService = {
     text: string,
     context?: ChatContextPayload
   ): Promise<ChatMessage> {
+    console.log('[chatService] sendMessageToBot called, USE_REAL_API:', USE_REAL_API);
     if (USE_REAL_API) {
+      console.log('[chatService] Using REAL API');
       return sendRealMessage(text, context);
     }
+    console.log('[chatService] Using MOCK API');
     return sendMockMessage(text, context);
   }
 };

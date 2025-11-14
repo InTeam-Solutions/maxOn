@@ -118,9 +118,7 @@ services:
     environment:
       - CONTEXT_SERVICE_URL=http://context:8002
       - LLM_SERVICE_URL=http://llm:8003
-      - CORE_SERVICE_URL=http://core:8004
       - REDIS_URL=redis://redis:6379/3
-      - CALENDAR_SERVICE_URL=${CALENDAR_SERVICE_URL}
     depends_on:
       context:
         condition: service_started
@@ -147,7 +145,7 @@ services:
     environment:
       - MAX_BOT_TOKEN=${MAX_BOT_TOKEN}
       - ORCHESTRATOR_URL=http://orchestrator:8001
-      - CORE_SERVICE_URL=http://core:8004
+      - CORE_SERVICE_URL=${CORE_SERVICE_URL}
       - CALENDAR_SERVICE_URL=${CALENDAR_SERVICE_URL}
     depends_on:
       orchestrator:
@@ -233,5 +231,5 @@ volumes:
   redis_data:
 
 networks:
-  maxon_network:f01875c ([ADD] mini-app in docker-compose)
+  maxon_network:
     driver: bridge

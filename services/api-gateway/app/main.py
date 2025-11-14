@@ -342,7 +342,7 @@ async def cmd_events(event: MessageCreated):
 async def cmd_webapp(event: MessageCreated):
     """Send link to open WebApp in browser with user_id"""
     user_id = str(event.message.sender.user_id)
-    webapp_url = f"https://mini-app-alpha-fawn.vercel.app?user_id={user_id}"
+    webapp_url = f"https://mini-5j1a77xgi-0stg0ts-projects.vercel.app?user_id={user_id}"
 
     message_text = (
         "🚀 <b>MaxOn Web App</b>\n\n"
@@ -851,6 +851,10 @@ async def handle_user_message(event: MessageCreated, text_override: Optional[str
     if not user_msg:
         return
 
+    # Skip commands - they should be handled by specific command handlers
+    if user_msg.startswith('/'):
+        return
+
     logger.info(f"[{user_id}] Received: {user_msg[:50]}...")
 
     track_event(user_id, "Message Received", {
@@ -967,7 +971,7 @@ async def handle_user_message(event: MessageCreated, text_override: Optional[str
         )
 
 
-@dp.message_created()
+@dp.message_created(F.message.body.text & ~F.message.body.text.startswith('/'))
 async def handle_message(event: MessageCreated):
     attachments = event.message.body.attachments or []
     audio_attachment = next((att for att in attachments if getattr(att, "type", None) == AttachmentType.AUDIO), None)

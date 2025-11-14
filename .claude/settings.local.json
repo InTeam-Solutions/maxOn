@@ -44,7 +44,20 @@
       "Bash(open https://mini-2a3lrea9p-0stg0ts-projects.vercel.app)",
       "Bash(open https://mini-8p7bip7du-0stg0ts-projects.vercel.app/test.html)",
       "Bash(brew install:*)",
-      "Bash(railway login:*)"
+      "Bash(railway login:*)",
+      "Bash(ln:*)",
+      "Bash(railway logs:*)",
+      "Bash(railway open:*)",
+      "Bash(vercel env:*)",
+      "Bash(vercel inspect:*)",
+      "Bash(xargs -I {} sh -c 'echo \"\"\"\"File: {}\"\"\"\" && cat {}')",
+      "Bash(git rm:*)",
+      "Bash(tee:*)",
+      "Bash(xargs kill:*)",
+      "Bash(railway status:*)",
+      "Bash(railway whoami:*)",
+      "Bash(railway list:*)",
+      "Bash(railway link:*)"
     ],
     "deny": [],
     "ask": []
