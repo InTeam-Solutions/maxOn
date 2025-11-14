@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import dayjs from 'dayjs';
 import { Button, Input, Typography } from '@maxhub/max-ui';
 import { apiClient } from '../services/api';
 import type { Goal } from '../types/domain';
@@ -92,11 +93,16 @@ export const AddTaskModal = ({ onClose, onSuccess, selectedDate }: AddTaskModalP
       setLoading(true);
       setError('');
 
+      // Use today's date if not specified
+      const finalDate = plannedDate || dayjs().format('YYYY-MM-DD');
+      // Use current time if not specified
+      const finalTime = plannedTime || dayjs().format('HH:mm');
+
       await apiClient.createStep({
         goal_id: parseInt(goalId),
         title: title.trim(),
-        planned_date: plannedDate || undefined,
-        planned_time: plannedTime || undefined,
+        planned_date: finalDate,
+        planned_time: finalTime,
         status: 'pending'
       });
 
