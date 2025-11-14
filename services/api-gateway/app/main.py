@@ -54,6 +54,9 @@ dp = Dispatcher()
 # HTTP client for Orchestrator and other services
 http_client = httpx.AsyncClient(timeout=30.0)
 
+# User states for multi-step interactions
+user_states: Dict[str, Dict[str, Any]] = {}
+
 WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 MONTH_NAMES = [
     "января", "февраля", "марта", "апреля", "мая", "июня",
@@ -69,9 +72,8 @@ def _attachments(markup):
 
 def main_menu_keyboard():
     return keyboard_from_pairs([
-        [("🎯 Мои цели", "show_goals"), ("📅 Календарь", "show_events")],
+        [("🎯 Мои цели", "show_goals"), ("📅 Календарь", "calendar_view_week")],
         [("📊 Статистика", "show_stats"), ("🏆 Лидерборд", "leaderboard")],
-        [("🗓 Расписание", "calendar_view_week"), ("🔗 Подписка на наш календарь", "calendar_link")],
         [("➕ Новая цель", "new_goal"), ("➕ Событие", "new_event")],
     ])
 
@@ -375,7 +377,10 @@ def calendar_view_keyboard(active: str):
             CallbackButton(text="➕ Событие", payload="new_event"),
             CallbackButton(text="🏠 Меню", payload="main_menu"),
         ],
-        [CallbackButton(text="🔗 Подписка на наш календарь", payload="calendar_link")],
+        [
+            CallbackButton(text="📥 Импорт", payload="import_calendar"),
+            CallbackButton(text="🔗 Подписка", payload="calendar_link"),
+        ],
     ]
     return build_inline_keyboard([filter_row, *action_rows])
 
@@ -629,7 +634,7 @@ async def show_events_for_user(chat_id: Optional[int], user_id: str, bot_instanc
                 rendered = render_events(events, title="📅 События на этой неделе")
                 keyboard = keyboard_from_pairs([
                     [("➕ Новое событие", "new_event"), ("🏠 Меню", "main_menu")],
-                    [("🗓 Расписание", "calendar_view_week"), ("🔗 Мой календарь", "calendar_link")],
+                    [("📅 Календарь", "calendar_view_week")],
                 ])
                 await bot_instance.send_message(
                     chat_id=chat_id,
@@ -640,7 +645,7 @@ async def show_events_for_user(chat_id: Optional[int], user_id: str, bot_instanc
             else:
                 keyboard = keyboard_from_pairs([
                     [("➕ Создать событие", "new_event")],
-                    [("🗓 Расписание", "calendar_view_week"), ("🔗 Мой календарь", "calendar_link")],
+                    [("📅 Календарь", "calendar_view_week")],
                     [("🏠 Меню", "main_menu")],
                 ])
                 await bot_instance.send_message(
@@ -786,6 +791,36 @@ async def callback_calendar_link(callback: MessageCallback):
     keyboard = keyboard_from_pairs([
         [("📅 События", "show_events"), ("🏠 Меню", "main_menu")],
     ])
+    await callback.message.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        attachments=_attachments(keyboard),
+        parse_mode=ParseMode.HTML,
+    )
+
+
+@dp.message_callback(F.callback.payload == "import_calendar")
+async def callback_import_calendar(callback: MessageCallback):
+    user_id = str(callback.callback.user.user_id)
+    chat_id = callback.message.recipient.chat_id
+    await send_typing(callback.message.bot, chat_id)
+
+    text = (
+        "📥 <b>Импорт внешнего календаря</b>\n\n"
+        "Отправь мне публичную ссылку на календарь в формате .ics\n\n"
+        "Например:\n"
+        "• Google Calendar: Настройки календаря → Публичный адрес в формате iCal\n"
+        "• Apple Calendar: Файл → Экспорт → получить .ics файл\n\n"
+        "После добавления календарь будет автоматически синхронизироваться каждые 10 секунд."
+    )
+
+    keyboard = keyboard_from_pairs([
+        [("🏠 Меню", "main_menu")],
+    ])
+
+    # Set user state to expect calendar URL
+    user_states[user_id] = {"action": "awaiting_calendar_url"}
+
     await callback.message.bot.send_message(
         chat_id=chat_id,
         text=text,
@@ -1254,6 +1289,76 @@ async def process_voice_message(event: MessageCreated, audio_attachment):
         )
 
 
+async def handle_calendar_url_input(event: MessageCreated, url: str):
+    """Handle external calendar URL input from user."""
+    user_id = str(event.message.sender.user_id)
+    chat_id = event.message.recipient.chat_id
+
+    # Clear user state
+    user_states.pop(user_id, None)
+
+    await send_typing(event.message.bot, chat_id)
+
+    # Validate URL
+    if not (url.startswith("http://") or url.startswith("https://")):
+        await event.message.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                "❌ Неверный формат ссылки.\n\n"
+                "Пожалуйста, отправь публичную ссылку на календарь (.ics), "
+                "которая начинается с http:// или https://"
+            ),
+            attachments=_attachments(keyboard_from_pairs([[("🏠 Меню", "main_menu")]])),
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    if not CALENDAR_SERVICE_URL:
+        await event.message.bot.send_message(
+            chat_id=chat_id,
+            text="😔 Сервис календаря недоступен. Попробуйте позже.",
+            attachments=_attachments(keyboard_from_pairs([[("🏠 Меню", "main_menu")]])),
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    try:
+        # Call calendar service to add external calendar
+        response = await http_client.post(
+            f"{CALENDAR_SERVICE_URL}/api/calendars/users/{user_id}/external",
+            json={"url": url},
+            timeout=10.0
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            text = (
+                "✅ <b>Календарь успешно добавлен!</b>\n\n"
+                f"Синхронизировано событий: {data.get('events_synced', 0)}\n\n"
+                "Календарь будет автоматически обновляться каждые 10 секунд."
+            )
+            track_event(user_id, "External Calendar Added", {"url": url})
+        else:
+            logger.error(f"Failed to add external calendar: {response.status_code} {response.text}")
+            text = (
+                "❌ Не удалось добавить календарь.\n\n"
+                f"Ошибка: {response.json().get('detail', 'Unknown error')}"
+            )
+    except Exception as e:
+        logger.error(f"Error adding external calendar: {e}")
+        text = "❌ Произошла ошибка при добавлении календаря. Попробуйте позже."
+
+    keyboard = keyboard_from_pairs([
+        [("📅 События", "show_events"), ("🏠 Меню", "main_menu")],
+    ])
+    await event.message.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        attachments=_attachments(keyboard),
+        parse_mode=ParseMode.HTML,
+    )
+
+
 async def handle_user_message(event: MessageCreated, text_override: Optional[str] = None):
     user_id = str(event.message.sender.user_id)
     user_msg = text_override or (event.message.body.text or "").strip()
@@ -1263,6 +1368,12 @@ async def handle_user_message(event: MessageCreated, text_override: Optional[str
 
     # Skip commands - they should be handled by specific command handlers
     if user_msg.startswith('/'):
+        return
+
+    # Check if user is in a specific state (e.g., awaiting calendar URL)
+    user_state = user_states.get(user_id)
+    if user_state and user_state.get("action") == "awaiting_calendar_url":
+        await handle_calendar_url_input(event, user_msg)
         return
 
     logger.info(f"[{user_id}] Received: {user_msg[:50]}...")
