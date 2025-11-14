@@ -1,7 +1,9 @@
 import os
 import logging
 import asyncio
-from typing import Any, Dict, List, Optional
+import calendar as calendar_module
+from datetime import date, datetime, time, timedelta
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 from maxapi import Bot, Dispatcher, F
@@ -52,6 +54,12 @@ dp = Dispatcher()
 # HTTP client for Orchestrator and other services
 http_client = httpx.AsyncClient(timeout=30.0)
 
+WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+MONTH_NAMES = [
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря"
+]
+MAX_LEADERBOARD_USERS = 10
 
 # --- Helper builders ---
 
@@ -62,8 +70,9 @@ def _attachments(markup):
 def main_menu_keyboard():
     return keyboard_from_pairs([
         [("🎯 Мои цели", "show_goals"), ("📅 Календарь", "show_events")],
+        [("📊 Статистика", "show_stats"), ("🏆 Лидерборд", "leaderboard")],
+        [("🗓 Расписание", "calendar_view_week"), ("🔗 Подписка", "calendar_link")],
         [("➕ Новая цель", "new_goal"), ("➕ Событие", "new_event")],
-        [("🔗 Мой календарь", "calendar_link")],
     ])
 
 
@@ -88,6 +97,367 @@ async def fetch_calendar_link(user_id: str) -> Optional[str]:
         logger.error("Calendar link request failed for %s: %s", user_id, exc)
         return None
 
+
+async def fetch_goals_for_user_raw(user_id: str, status: Optional[str] = None) -> List[Dict[str, Any]]:
+    params: Dict[str, Any] = {"user_id": user_id}
+    if status:
+        params["status"] = status
+    try:
+        response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/goals",
+            params=params
+        )
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Failed to load goals for %s: %s", user_id, response.text)
+    except Exception as exc:
+        logger.error("Goal request failed for %s: %s", user_id, exc)
+    return []
+
+
+async def fetch_events_range(user_id: str, start: date, end: date) -> List[Dict[str, Any]]:
+    try:
+        response = await http_client.get(
+            f"{CORE_SERVICE_URL}/api/events",
+            params={
+                "user_id": user_id,
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+            }
+        )
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Failed to load events for %s: %s", user_id, response.text)
+    except Exception as exc:
+        logger.error("Event request failed for %s: %s", user_id, exc)
+    return []
+
+
+def _safe_date(value: Optional[str]) -> Optional[date]:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value).date()
+    except ValueError:
+        return None
+
+
+def _format_weekday(d: date) -> str:
+    return f"{WEEKDAY_NAMES[d.weekday()]} {d.strftime('%d.%m')}"
+
+
+def _event_datetime(event: Dict[str, Any]) -> Optional[datetime]:
+    event_date = _safe_date(event.get("date"))
+    if not event_date:
+        return None
+    event_time_str = event.get("time")
+    event_time_obj: Optional[time] = None
+    if event_time_str:
+        try:
+            event_time_obj = datetime.strptime(event_time_str, "%H:%M").time()
+        except ValueError:
+            event_time_obj = None
+    return datetime.combine(event_date, event_time_obj or time.min)
+
+
+def _format_period(start: date, end: date) -> str:
+    if start.month == end.month:
+        month_name = MONTH_NAMES[start.month - 1]
+        return f"{start.day}–{end.day} {month_name}"
+    return f"{start.strftime('%d.%m')} – {end.strftime('%d.%m')}"
+
+
+async def build_personal_stats(user_id: str) -> str:
+    goals = await fetch_goals_for_user_raw(user_id)
+    today = date.today()
+    week_start = today - timedelta(days=7)
+
+    if not goals:
+        return (
+            "📊 <b>Личная статистика</b>\n\n"
+            "У тебя пока нет целей — самое время поставить первую и получить план действий! "
+            "Нажми «➕ Новая цель» в главном меню."
+        )
+
+    total_goals = len(goals)
+    active_goals = sum(1 for goal in goals if goal.get("status") == "active")
+    completed_goals = sum(1 for goal in goals if goal.get("status") == "completed")
+    avg_progress = sum(goal.get("progress_percent", 0) for goal in goals) / max(total_goals, 1)
+
+    total_steps = sum(len(goal.get("steps", [])) for goal in goals)
+    completed_steps = sum(
+        1 for goal in goals for step_item in goal.get("steps", [])
+        if step_item.get("status") == "completed"
+    )
+    steps_last_week = 0
+    for goal in goals:
+        for step_item in goal.get("steps", []):
+            if step_item.get("status") != "completed":
+                continue
+            completed_at = _safe_date(step_item.get("completed_at"))
+            if completed_at and completed_at >= week_start:
+                steps_last_week += 1
+
+    next_deadline = min(
+        (parsed for parsed in (_safe_date(goal.get("target_date")) for goal in goals) if parsed),
+        default=None
+    )
+
+    events_next_week = await fetch_events_range(user_id, today, today + timedelta(days=7))
+    upcoming_events = len(events_next_week)
+    next_event = None
+    if events_next_week:
+        events_sorted = sorted(
+            (evt for evt in events_next_week if _event_datetime(evt)),
+            key=lambda evt: _event_datetime(evt)
+        )
+        if events_sorted:
+            next_event = events_sorted[0]
+
+    lines = [
+        "📊 <b>Личная статистика</b>",
+        f"Всего целей: <b>{total_goals}</b> (активных — <b>{active_goals}</b>, завершённых — <b>{completed_goals}</b>)",
+        f"Средний прогресс: <b>{avg_progress:.0f}%</b>",
+    ]
+
+    if total_steps:
+        lines.append(f"Шагов выполнено: <b>{completed_steps}/{total_steps}</b>")
+    lines.append(f"За 7 дней закрыто шагов: <b>{steps_last_week}</b>")
+
+    if next_deadline:
+        lines.append(f"Ближайший дедлайн цели: <b>{_format_weekday(next_deadline)}</b>")
+
+    if upcoming_events:
+        lines.append(f"События на неделе: <b>{upcoming_events}</b>")
+        if next_event:
+            event_date = _safe_date(next_event.get("date"))
+            when = _format_weekday(event_date) if event_date else "скоро"
+            time_hint = next_event.get("time")
+            time_part = f" в {time_hint}" if time_hint else ""
+            lines.append(f"Следующее: {when}{time_part} — <i>{next_event.get('title', 'Событие')}</i>")
+
+    return "\n".join(lines)
+
+
+async def show_personal_stats(chat_id: Optional[int], user_id: str, bot_instance: Bot):
+    await send_typing(bot_instance, chat_id)
+    stats_text = await build_personal_stats(user_id)
+    keyboard = keyboard_from_pairs([
+        [("🎯 Цели", "show_goals"), ("🏠 Меню", "main_menu")],
+        [("🏆 Лидерборд", "leaderboard")],
+    ])
+    await bot_instance.send_message(
+        chat_id=chat_id,
+        text=stats_text,
+        attachments=_attachments(keyboard),
+        parse_mode=ParseMode.HTML,
+    )
+
+
+async def _user_goals_summary(user_id: str) -> Dict[str, Any]:
+    goals = await fetch_goals_for_user_raw(user_id)
+    total = len(goals)
+    completed = sum(1 for goal in goals if goal.get("status") == "completed")
+    avg_progress = sum(goal.get("progress_percent", 0) for goal in goals) / max(total, 1)
+    return {
+        "user_id": user_id,
+        "avg_progress": avg_progress,
+        "completed": completed,
+        "total": total,
+    }
+
+
+async def build_leaderboard(user_id: str) -> str:
+    user_ids: List[str] = []
+    try:
+        response = await http_client.get(f"{CORE_SERVICE_URL}/api/users")
+        if response.status_code == 200:
+            user_ids = [
+                u.get("user_id")
+                for u in response.json()
+                if u.get("user_id")
+            ]
+        else:
+            logger.warning("Failed to fetch users for leaderboard: %s", response.text)
+    except Exception as exc:
+        logger.error("User list request failed: %s", exc)
+
+    if user_id not in user_ids:
+        user_ids.insert(0, user_id)
+
+    user_ids = user_ids[:MAX_LEADERBOARD_USERS]
+
+    summaries = await asyncio.gather(*[_user_goals_summary(uid) for uid in user_ids])
+    entries = [summary for summary in summaries if summary]
+
+    if not entries:
+        return (
+            "🏆 <b>Лидерборд</b>\n\n"
+            "Пока нет достаточно данных, чтобы построить рейтинг. "
+            "Создай цель и продвинься по шагам, чтобы появиться в списке лидеров!"
+        )
+
+    entries_sorted = sorted(
+        entries,
+        key=lambda item: (item["avg_progress"], item["completed"]),
+        reverse=True
+    )
+
+    lines = [
+        "🏆 <b>Лидерборд</b>",
+        "Лучшие по среднему прогрессу целей:",
+    ]
+
+    display_entries = entries_sorted[:5]
+    for idx, entry in enumerate(display_entries, start=1):
+        marker = "⭐️ " if entry["user_id"] == user_id else ""
+        label = "Ты" if entry["user_id"] == user_id else f"ID {entry['user_id']}"
+        lines.append(
+            f"{idx}. {marker}{label} — <b>{entry['avg_progress']:.0f}%</b> "
+            f"(закрыто целей: {entry['completed']}/{entry['total']})"
+        )
+
+    current_rank = next(
+        (idx for idx, entry in enumerate(entries_sorted, start=1) if entry["user_id"] == user_id),
+        None
+    )
+    if current_rank and current_rank > len(display_entries):
+        own_entry = next(entry for entry in entries_sorted if entry["user_id"] == user_id)
+        lines.append("")
+        lines.append(
+            f"Ты на {current_rank}-м месте с прогрессом {own_entry['avg_progress']:.0f}% "
+            f"({own_entry['completed']} завершённых целей)."
+        )
+
+    return "\n".join(lines)
+
+
+async def show_leaderboard(chat_id: Optional[int], user_id: str, bot_instance: Bot):
+    await send_typing(bot_instance, chat_id)
+    text = await build_leaderboard(user_id)
+    keyboard = keyboard_from_pairs([
+        [("📊 Статистика", "show_stats"), ("🏠 Меню", "main_menu")],
+    ])
+    await bot_instance.send_message(
+        chat_id=chat_id,
+        text=text,
+        attachments=_attachments(keyboard),
+        parse_mode=ParseMode.HTML,
+    )
+
+
+def _calendar_period(period: str) -> Tuple[date, date]:
+    today = date.today()
+    if period == "today":
+        return today, today
+    if period == "month":
+        last_day = calendar_module.monthrange(today.year, today.month)[1]
+        return today.replace(day=1), date(today.year, today.month, last_day)
+    # Default: week
+    return today, today + timedelta(days=6)
+
+
+def calendar_view_keyboard(active: str):
+    labels = [
+        ("calendar_view_today", "Сегодня"),
+        ("calendar_view_week", "Неделя"),
+        ("calendar_view_month", "Месяц"),
+    ]
+    filter_row = [
+        CallbackButton(
+            text=("• " if active == payload else "") + label,
+            payload=payload
+        )
+        for payload, label in labels
+    ]
+    action_rows = [
+        [
+            CallbackButton(text="➕ Событие", payload="new_event"),
+            CallbackButton(text="🏠 Меню", payload="main_menu"),
+        ],
+        [CallbackButton(text="🔗 Подписка", payload="calendar_link")],
+    ]
+    return build_inline_keyboard([filter_row, *action_rows])
+
+
+def _render_day_block(day: date, events: List[Dict[str, Any]]) -> List[str]:
+    lines = [f"<b>{_format_weekday(day)}</b>"]
+    if not events:
+        lines.append("  <i>Нет событий</i>")
+        return lines
+
+    for event in sorted(events, key=lambda e: (e.get("time") or "24:00", e.get("title", "")))[:4]:
+        time_hint = event.get("time") or "весь день"
+        title = event.get("title", "Событие")
+        lines.append(f"  • {time_hint} — {title}")
+    if len(events) > 4:
+        lines.append(f"  … и ещё {len(events) - 4}")
+    return lines
+
+
+async def build_calendar_overview(user_id: str, period: str) -> str:
+    start, end = _calendar_period(period)
+    events = await fetch_events_range(user_id, start, end)
+
+    title_map = {
+        "today": "Сегодня",
+        "week": "Неделя",
+        "month": "Месяц",
+    }
+    title = title_map.get(period, "Неделя")
+
+    lines = [
+        f"🗓 <b>{title}</b>",
+        _format_period(start, end),
+        "",
+    ]
+
+    grouped: Dict[str, List[Dict[str, Any]]] = {}
+    for event in events:
+        event_date = _safe_date(event.get("date"))
+        if not event_date:
+            continue
+        grouped.setdefault(event_date.isoformat(), []).append(event)
+
+    if period == "month":
+        lines.append(f"Всего событий в этом месяце: <b>{len(events)}</b>")
+        upcoming = sorted(
+            (evt for evt in events if _event_datetime(evt)),
+            key=_event_datetime
+        )[:5]
+        if upcoming:
+            lines.append("")
+            lines.append("<b>Ближайшие события:</b>")
+            for event in upcoming:
+                event_date = _safe_date(event.get("date"))
+                when = _format_weekday(event_date) if event_date else "Скоро"
+                time_hint = event.get("time")
+                title = event.get("title", "Событие")
+                lines.append(f"• {when}{f' в {time_hint}' if time_hint else ''} — {title}")
+        elif not events:
+            lines.append("")
+            lines.append("<i>В этом месяце пока нет событий.</i>")
+        return "\n".join(lines)
+
+    current = start
+    while current <= end:
+        lines.extend(_render_day_block(current, grouped.get(current.isoformat(), [])))
+        lines.append("")
+        current += timedelta(days=1)
+
+    return "\n".join(lines).strip()
+
+
+async def show_calendar_overview(chat_id: Optional[int], user_id: str, bot_instance: Bot, period: str):
+    await send_typing(bot_instance, chat_id)
+    text = await build_calendar_overview(user_id, period)
+    keyboard = calendar_view_keyboard(period)
+    await bot_instance.send_message(
+        chat_id=chat_id,
+        text=text,
+        attachments=_attachments(keyboard),
+        parse_mode=ParseMode.HTML,
+    )
 
 # --- Core functions ---
 
@@ -259,7 +629,7 @@ async def show_events_for_user(chat_id: Optional[int], user_id: str, bot_instanc
                 rendered = render_events(events, title="📅 События на этой неделе")
                 keyboard = keyboard_from_pairs([
                     [("➕ Новое событие", "new_event"), ("🏠 Меню", "main_menu")],
-                    [("🔗 Мой календарь", "calendar_link")],
+                    [("🗓 Расписание", "calendar_view_week"), ("🔗 Мой календарь", "calendar_link")],
                 ])
                 await bot_instance.send_message(
                     chat_id=chat_id,
@@ -270,7 +640,7 @@ async def show_events_for_user(chat_id: Optional[int], user_id: str, bot_instanc
             else:
                 keyboard = keyboard_from_pairs([
                     [("➕ Создать событие", "new_event")],
-                    [("🔗 Мой календарь", "calendar_link")],
+                    [("🗓 Расписание", "calendar_view_week"), ("🔗 Мой календарь", "calendar_link")],
                     [("🏠 Меню", "main_menu")],
                 ])
                 await bot_instance.send_message(
@@ -338,6 +708,21 @@ async def cmd_events(event: MessageCreated):
     await show_events_for_user(event.message.recipient.chat_id, str(event.message.sender.user_id), event.message.bot)
 
 
+@dp.message_created(Command("stats"))
+async def cmd_stats(event: MessageCreated):
+    await show_personal_stats(event.message.recipient.chat_id, str(event.message.sender.user_id), event.message.bot)
+
+
+@dp.message_created(Command("leaderboard"))
+async def cmd_leaderboard(event: MessageCreated):
+    await show_leaderboard(event.message.recipient.chat_id, str(event.message.sender.user_id), event.message.bot)
+
+
+@dp.message_created(Command("calendar"))
+async def cmd_calendar(event: MessageCreated):
+    await show_calendar_overview(event.message.recipient.chat_id, str(event.message.sender.user_id), event.message.bot, "week")
+
+
 @dp.message_created(Command("webapp"))
 async def cmd_webapp(event: MessageCreated):
     """Send link to open WebApp in browser with user_id"""
@@ -366,6 +751,18 @@ async def callback_show_events(callback: MessageCallback):
     await show_events_for_user(callback.message.recipient.chat_id, user_id, callback.message.bot)
 
 
+@dp.message_callback(F.callback.payload == "show_stats")
+async def callback_show_stats(callback: MessageCallback):
+    user_id = str(callback.callback.user.user_id)
+    await show_personal_stats(callback.message.recipient.chat_id, user_id, callback.message.bot)
+
+
+@dp.message_callback(F.callback.payload == "leaderboard")
+async def callback_show_leaderboard(callback: MessageCallback):
+    user_id = str(callback.callback.user.user_id)
+    await show_leaderboard(callback.message.recipient.chat_id, user_id, callback.message.bot)
+
+
 @dp.message_callback(F.callback.payload == "calendar_link")
 async def callback_calendar_link(callback: MessageCallback):
     user_id = str(callback.callback.user.user_id)
@@ -391,6 +788,19 @@ async def callback_calendar_link(callback: MessageCallback):
     ])
     await callback.message.bot.send_message(
         chat_id=chat_id,
+        text=text,
+        attachments=_attachments(keyboard),
+        parse_mode=ParseMode.HTML,
+    )
+
+
+@dp.message_callback(F.callback.payload.in_({"calendar_view_today", "calendar_view_week", "calendar_view_month"}))
+async def callback_calendar_view(callback: MessageCallback):
+    user_id = str(callback.callback.user.user_id)
+    period = callback.callback.payload.split("_")[-1]
+    text = await build_calendar_overview(user_id, period)
+    keyboard = calendar_view_keyboard(period)
+    await callback.message.edit(
         text=text,
         attachments=_attachments(keyboard),
         parse_mode=ParseMode.HTML,
@@ -1006,6 +1416,9 @@ async def on_startup():
         BotCommand(name="/start", description="🏠 Главное меню"),
         BotCommand(name="/goals", description="🎯 Мои цели"),
         BotCommand(name="/events", description="📅 Календарь событий"),
+        BotCommand(name="/calendar", description="🗓 Мой календарь"),
+        BotCommand(name="/stats", description="📊 Личная статистика"),
+        BotCommand(name="/leaderboard", description="🏆 Лидерборд"),
         BotCommand(name="/webapp", description="🚀 Открыть Web App"),
     ]
     await bot.set_my_commands(*commands)
