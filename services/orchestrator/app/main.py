@@ -95,7 +95,7 @@ class ProcessMessageResponse(BaseModel):
     text: Optional[str] = None
     items: Optional[list] = None
     set_id: Optional[str] = None
-    buttons: Optional[list] = None  # For inline buttons: [{"text": "...", "callback": "..."}]
+    buttons: Optional[list] = None  # For inline buttons: [{"text": "...", "callback_data": "..."}]
     error: Optional[str] = None
 
 
@@ -673,8 +673,8 @@ async def handle_scheduling_flow(user_id: str, message: str, current_state: str,
                     response_type="inline_buttons",
                     text=text,
                     buttons=[
-                        {"text": "✅ Да, запланировать", "callback": f"schedule_accept:{goal_id}"},
-                        {"text": "❌ Нет, сам разберусь", "callback": f"schedule_decline:{goal_id}"}
+                        {"text": "✅ Да, запланировать", "callback_data": f"schedule_accept:{goal_id}"},
+                        {"text": "❌ Нет, сам разберусь", "callback_data": f"schedule_decline:{goal_id}"}
                     ]
                 )
             else:
@@ -692,8 +692,8 @@ async def handle_scheduling_flow(user_id: str, message: str, current_state: str,
                     response_type="inline_buttons",
                     text=text,
                     buttons=[
-                        {"text": "✅ Да, попробуем", "callback": f"schedule_accept:{goal_id}"},
-                        {"text": "❌ Нет, спасибо", "callback": f"schedule_decline:{goal_id}"}
+                        {"text": "✅ Да, попробуем", "callback_data": f"schedule_accept:{goal_id}"},
+                        {"text": "❌ Нет, спасибо", "callback_data": f"schedule_decline:{goal_id}"}
                     ]
                 )
         except Exception as e:
@@ -1222,10 +1222,10 @@ async def process_callback(request: ProcessCallbackRequest):
 
             text = "⏰ <b>Когда тебе удобнее работать над целью?</b>\n(можно выбрать несколько)"
             buttons = [
-                {"text": "🌅 Утро (9-12)", "callback": f"time_pref:morning:{goal_id}"},
-                {"text": "☀️ День (12-18)", "callback": f"time_pref:afternoon:{goal_id}"},
-                {"text": "🌙 Вечер (18-22)", "callback": f"time_pref:evening:{goal_id}"},
-                {"text": "✅ Готово", "callback": f"time_pref_done:{goal_id}"}
+                {"text": "🌅 Утро (9-12)", "callback_data": f"time_pref:morning:{goal_id}"},
+                {"text": "☀️ День (12-18)", "callback_data": f"time_pref:afternoon:{goal_id}"},
+                {"text": "🌙 Вечер (18-22)", "callback_data": f"time_pref:evening:{goal_id}"},
+                {"text": "✅ Готово", "callback_data": f"time_pref_done:{goal_id}"}
             ]
 
             return ProcessMessageResponse(
@@ -1275,10 +1275,10 @@ async def process_callback(request: ProcessCallbackRequest):
             text = f"⏰ <b>Когда тебе удобнее работать над целью?</b>\n(можно выбрать несколько)\n\nВыбрано: {selected}"
 
             buttons = [
-                {"text": f"{'✅ ' if 'morning' in preferred_times else ''}🌅 Утро (9-12)", "callback": f"time_pref:morning:{goal_id}"},
-                {"text": f"{'✅ ' if 'afternoon' in preferred_times else ''}☀️ День (12-18)", "callback": f"time_pref:afternoon:{goal_id}"},
-                {"text": f"{'✅ ' if 'evening' in preferred_times else ''}🌙 Вечер (18-22)", "callback": f"time_pref:evening:{goal_id}"},
-                {"text": "➡️ Далее", "callback": f"time_pref_done:{goal_id}"}
+                {"text": f"{'✅ ' if 'morning' in preferred_times else ''}🌅 Утро (9-12)", "callback_data": f"time_pref:morning:{goal_id}"},
+                {"text": f"{'✅ ' if 'afternoon' in preferred_times else ''}☀️ День (12-18)", "callback_data": f"time_pref:afternoon:{goal_id}"},
+                {"text": f"{'✅ ' if 'evening' in preferred_times else ''}🌙 Вечер (18-22)", "callback_data": f"time_pref:evening:{goal_id}"},
+                {"text": "➡️ Далее", "callback_data": f"time_pref_done:{goal_id}"}
             ]
 
             return ProcessMessageResponse(
@@ -1305,14 +1305,14 @@ async def process_callback(request: ProcessCallbackRequest):
 
             text = "📅 <b>В какие дни недели тебе удобно?</b>\n(можно выбрать несколько)"
             buttons = [
-                {"text": "Пн", "callback": f"day_pref:mon:{goal_id}"},
-                {"text": "Вт", "callback": f"day_pref:tue:{goal_id}"},
-                {"text": "Ср", "callback": f"day_pref:wed:{goal_id}"},
-                {"text": "Чт", "callback": f"day_pref:thu:{goal_id}"},
-                {"text": "Пт", "callback": f"day_pref:fri:{goal_id}"},
-                {"text": "Сб", "callback": f"day_pref:sat:{goal_id}"},
-                {"text": "Вс", "callback": f"day_pref:sun:{goal_id}"},
-                {"text": "✅ Готово", "callback": f"day_pref_done:{goal_id}"}
+                {"text": "Пн", "callback_data": f"day_pref:mon:{goal_id}"},
+                {"text": "Вт", "callback_data": f"day_pref:tue:{goal_id}"},
+                {"text": "Ср", "callback_data": f"day_pref:wed:{goal_id}"},
+                {"text": "Чт", "callback_data": f"day_pref:thu:{goal_id}"},
+                {"text": "Пт", "callback_data": f"day_pref:fri:{goal_id}"},
+                {"text": "Сб", "callback_data": f"day_pref:sat:{goal_id}"},
+                {"text": "Вс", "callback_data": f"day_pref:sun:{goal_id}"},
+                {"text": "✅ Готово", "callback_data": f"day_pref_done:{goal_id}"}
             ]
 
             return ProcessMessageResponse(
@@ -1349,9 +1349,9 @@ async def process_callback(request: ProcessCallbackRequest):
                 label = {"mon": "Пн", "tue": "Вт", "wed": "Ср", "thu": "Чт", "fri": "Пт", "sat": "Сб", "sun": "Вс"}[d]
                 if d in preferred_days:
                     label = f"✅ {label}"
-                day_buttons.append({"text": label, "callback": f"day_pref:{d}:{goal_id}"})
+                day_buttons.append({"text": label, "callback_data": f"day_pref:{d}:{goal_id}"})
 
-            day_buttons.append({"text": "➡️ Далее", "callback": f"day_pref_done:{goal_id}"})
+            day_buttons.append({"text": "➡️ Далее", "callback_data": f"day_pref_done:{goal_id}"})
 
             return ProcessMessageResponse(
                 success=True,
@@ -1467,8 +1467,8 @@ async def process_callback(request: ProcessCallbackRequest):
                 response_type="inline_buttons",
                 text=text,
                 buttons=[
-                    {"text": "✅ Да, добавить", "callback": f"schedule_confirm:{goal_id}"},
-                    {"text": "❌ Отменить", "callback": f"schedule_cancel:{goal_id}"}
+                    {"text": "✅ Да, добавить", "callback_data": f"schedule_confirm:{goal_id}"},
+                    {"text": "❌ Отменить", "callback_data": f"schedule_cancel:{goal_id}"}
                 ]
             )
 
