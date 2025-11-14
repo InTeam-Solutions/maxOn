@@ -49,7 +49,7 @@ export type ChatAttachment =
 
 export interface ChatButton {
   text: string;
-  action: string;
+  callback_data: string;
   data?: any;
 }
 
