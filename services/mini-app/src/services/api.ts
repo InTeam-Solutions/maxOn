@@ -103,13 +103,22 @@ class ApiClient {
   async createStep(data: {
     goal_id: number;
     title: string;
+    order?: number;
     planned_date?: string;
     planned_time?: string;
     status?: string;
   }): Promise<any> {
-    return this.request<any>(`${this.coreUrl}/api/steps?user_id=${this.userId}`, {
+    const goalId = data.goal_id;
+    // Get max order from existing steps for this goal
+    const goal = await this.getGoal(String(goalId));
+    const maxOrder = goal.steps?.length ? Math.max(...goal.steps.map((s: any) => s.order || 0)) : 0;
+
+    return this.request<any>(`${this.coreUrl}/api/goals/${goalId}/steps?user_id=${this.userId}`, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        ...data,
+        order: data.order ?? (maxOrder + 1)
+      }),
     });
   }
 
@@ -120,7 +129,7 @@ class ApiClient {
     return this.request<any>(
       `${this.coreUrl}/api/steps/${stepId}?user_id=${this.userId}`,
       {
-        method: 'PATCH',
+        method: 'PUT',
         body: JSON.stringify(data),
       }
     );
