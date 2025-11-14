@@ -9,6 +9,7 @@ from app import schemas
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.services import calendars as calendars_service
+from app.services import external_calendars as external_calendars_service
 
 router = APIRouter(prefix="/api/calendars", tags=["calendars"])
 
@@ -85,3 +86,35 @@ async def get_calendar(
         public_ics_url=settings.build_public_ics_url(calendar.public_token),
         events=[schemas.EventResponse.model_validate(event) for event in events],
     )
+
+
+@router.post("/users/{user_id}/external")
+async def add_external_calendar(
+    user_id: int,
+    payload: schemas.ExternalCalendarCreate,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Add an external calendar subscription and sync it."""
+    # Ensure user has a calendar
+    calendar = await calendars_service.ensure_calendar(session, user_id=user_id)
+
+    # Create external calendar
+    external_calendar = await external_calendars_service.create_external_calendar(
+        session, calendar.id, payload
+    )
+
+    # Sync immediately
+    try:
+        sync_result = await external_calendars_service.sync_external_calendar(
+            session, external_calendar
+        )
+        return {
+            "external_calendar_id": str(external_calendar.id),
+            "events_synced": sync_result.events_added,
+            "message": "External calendar added and synced successfully"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to sync external calendar: {str(e)}"
+        )

@@ -55,3 +55,29 @@ class EventResponse(BaseModel):
 
 class CalendarDetailResponse(CalendarResponse):
     events: List[EventResponse]
+
+
+class ExternalCalendarCreate(BaseModel):
+    url: str
+    name: Optional[str] = Field(default=None, max_length=255)
+
+
+class ExternalCalendarResponse(BaseModel):
+    id: UUID
+    calendar_id: UUID
+    url: str
+    name: Optional[str]
+    last_synced_at: Optional[datetime]
+    sync_interval_seconds: int
+    is_active: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ExternalCalendarSyncResult(BaseModel):
+    external_calendar_id: UUID
+    events_synced: int
+    events_added: int
+    events_updated: int
+    events_removed: int
