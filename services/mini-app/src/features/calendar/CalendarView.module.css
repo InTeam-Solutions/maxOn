@@ -357,10 +357,132 @@
   flex-wrap: wrap;
 }
 
-@media (max-width: 600px) {
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  /* View Mode Selector - Stack vertically on mobile */
+  .viewModeSelector {
+    width: 100%;
+  }
+
+  .viewModeButton {
+    flex: 1;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+
+  /* Week View - Reduce to 3-4 days visible, horizontal scroll */
+  .weekGrid {
+    grid-template-columns: repeat(7, minmax(140px, 1fr));
+    overflow-x: auto;
+    overflow-y: visible;
+    gap: 6px;
+    padding-bottom: 8px;
+    /* Smooth scrolling */
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .weekGrid::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  .weekGrid::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .weekGrid::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+  }
+
+  .weekDayColumn {
+    min-width: 130px;
+    min-height: 180px;
+    padding: 10px 6px;
+  }
+
+  .weekDayHeader {
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+  }
+
+  .weekDayName {
+    font-size: 10px;
+  }
+
+  .weekDayNumber {
+    font-size: 18px;
+  }
+
+  .weekDayNumber.todayNumber {
+    width: 28px;
+    height: 28px;
+  }
+
+  .weekEventCard {
+    padding: 6px;
+  }
+
+  .weekEventTime {
+    font-size: 10px;
+  }
+
+  .weekEventTitle {
+    font-size: 12px;
+  }
+
+  /* Day View - Reduce timeline height on mobile */
+  .timelineContainer {
+    height: 1200px; /* Reduce from 1440px */
+  }
+
+  .timeColumn {
+    width: 60px; /* Reduce from 70px */
+  }
+
+  .hourSlot {
+    height: 50px; /* Reduce from 60px */
+  }
+
+  .hourLabel {
+    font-size: 11px;
+  }
+
+  .dayEventCard {
+    padding: 6px 10px;
+    min-height: 45px;
+  }
+
+  .dayEventTime {
+    font-size: 11px;
+  }
+
+  .dayEventTitle {
+    font-size: 13px;
+  }
+
+  /* Month View - Smaller cells on mobile */
+  .grid {
+    gap: 4px;
+  }
+
+  .dayCell {
+    padding: 8px 0;
+    font-size: 14px;
+  }
+
+  .marker {
+    width: 5px;
+    height: 5px;
+    margin-top: 4px;
+  }
+
+  /* Agenda Items */
   .agendaItem {
     flex-direction: column;
     align-items: flex-start;
+    padding: 12px;
   }
 
   .agendaActions {
