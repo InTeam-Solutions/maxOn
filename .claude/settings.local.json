@@ -58,7 +58,8 @@
       "Bash(railway whoami:*)",
       "Bash(railway list:*)",
       "Bash(railway link:*)",
-      "Bash(open https://mini-app-alpha-fawn.vercel.app)"
+      "Bash(open https://mini-app-alpha-fawn.vercel.app)",
+      "Bash(open https://railway.app/dashboard)"
     ],
     "deny": [],
     "ask": []

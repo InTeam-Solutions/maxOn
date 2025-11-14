@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import type { ChatAttachment, ChatMessage } from '../types/domain';
+import type { ChatAttachment, ChatButton, ChatMessage } from '../types/domain';
 import { generateId } from '../utils/id';
 import { apiClient } from './api';
 
@@ -109,13 +109,27 @@ async function sendRealMessage(
     // Log for debugging
     console.log('[chatService] Orchestrator response:', response);
 
+    // Normalize buttons format: ensure it's array of arrays
+    let normalizedButtons: ChatButton[][] | undefined = undefined;
+    if (response.buttons) {
+      if (Array.isArray(response.buttons)) {
+        // Check if it's already array of arrays
+        if (response.buttons.length > 0 && Array.isArray(response.buttons[0])) {
+          normalizedButtons = response.buttons as ChatButton[][];
+        } else {
+          // Convert flat array to array of arrays
+          normalizedButtons = [response.buttons as ChatButton[]];
+        }
+      }
+    }
+
     return {
       id: `bot-${generateId()}`,
       author: 'maxon',
       text: responseText,
       timestamp: dayjs().toISOString(),
       attachments: response.attachments || buildAttachments(context),
-      buttons: response.buttons || undefined,
+      buttons: normalizedButtons,
       isHtml: true // Orchestrator returns HTML formatted text
     };
   } catch (error) {
