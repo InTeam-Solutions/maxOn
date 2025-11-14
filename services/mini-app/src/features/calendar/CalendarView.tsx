@@ -191,8 +191,10 @@ export const CalendarView = () => {
                 )}
                 {/* Day's events positioned on timeline */}
                 {agendaTasks.map((task) => {
-                  const taskTime = task.plannedTime || '09:00';
-                  const [hours, minutes] = taskTime.split(':').map(Number);
+                  const taskDateTime = dayjs(task.dueDate);
+                  const taskTime = taskDateTime.format('HH:mm');
+                  const hours = taskDateTime.hour();
+                  const minutes = taskDateTime.minute();
                   const topPosition = ((hours * 60 + minutes) / 14.4);
 
                   return (
@@ -275,7 +277,7 @@ export const CalendarView = () => {
                           }}
                         >
                           <div className={styles.weekEventTime}>
-                            {task.plannedTime || '09:00'}
+                            {dayjs(task.dueDate).format('HH:mm')}
                           </div>
                           <div className={styles.weekEventTitle}>
                             {task.title.length > 30 ? `${task.title.slice(0, 30)}...` : task.title}
