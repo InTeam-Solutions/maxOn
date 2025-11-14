@@ -46,9 +46,11 @@ class ApiClient {
   // ==================== Goals API ====================
 
   async getGoals(): Promise<Goal[]> {
-    return this.request<Goal[]>(
+    const result = await this.request<Goal[]>(
       `${this.coreUrl}/api/goals?user_id=${this.userId}`
     );
+    console.log('[API] getGoals response:', result);
+    return result;
   }
 
   async getGoal(goalId: string): Promise<Goal> {
@@ -67,7 +69,10 @@ class ApiClient {
   }): Promise<Goal> {
     return this.request<Goal>(`${this.coreUrl}/api/goals?user_id=${this.userId}`, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        ...data,
+        user_id: this.userId  // Add user_id to request body
+      }),
     });
   }
 
@@ -113,12 +118,17 @@ class ApiClient {
     const goal = await this.getGoal(String(goalId));
     const maxOrder = goal.steps?.length ? Math.max(...goal.steps.map((s: any) => s.order || 0)) : 0;
 
+    const payload = {
+      ...data,
+      user_id: this.userId,  // Add user_id to request body
+      order: data.order ?? (maxOrder + 1)
+    };
+
+    console.log('[API] createStep payload:', payload);
+
     return this.request<any>(`${this.coreUrl}/api/goals/${goalId}/steps?user_id=${this.userId}`, {
       method: 'POST',
-      body: JSON.stringify({
-        ...data,
-        order: data.order ?? (maxOrder + 1)
-      }),
+      body: JSON.stringify(payload),
     });
   }
 
@@ -170,7 +180,10 @@ class ApiClient {
   }): Promise<any> {
     return this.request<any>(`${this.coreUrl}/api/events?user_id=${this.userId}`, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        ...data,
+        user_id: this.userId  // Add user_id to request body
+      }),
     });
   }
 

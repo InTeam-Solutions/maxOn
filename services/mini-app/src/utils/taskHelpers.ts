@@ -8,15 +8,20 @@ export function stepToTask(
   step: any,
   goal: Goal
 ): Task | null {
-  // Only convert steps that have a planned_date
-  if (!step.planned_date) {
-    return null;
-  }
+  // Convert steps with planned_date OR without (treat null as "today without time")
+  let dueDate: string;
 
-  // Combine planned_date and planned_time into dueDate
-  const date = step.planned_date;
-  const time = step.planned_time || '00:00:00';
-  const dueDate = dayjs(`${date}T${time}`).toISOString();
+  if (step.planned_date) {
+    // Has date - combine with time
+    const date = step.planned_date;
+    const time = step.planned_time || '00:00:00';
+    console.log('[stepToTask] Converting step with date:', { step, date, time });
+    dueDate = dayjs(`${date}T${time}`).toISOString();
+  } else {
+    // No date - use today with special marker
+    console.log('[stepToTask] Converting step WITHOUT date (showing as today):', step);
+    dueDate = dayjs().toISOString();
+  }
 
   // Map backend status to frontend TaskStatus
   const statusMap: Record<string, TaskStatus> = {
@@ -32,8 +37,9 @@ export function stepToTask(
     goalTitle: goal.title,
     dueDate,
     status: statusMap[step.status] || 'scheduled',
-    focusArea: goal.category || 'Общее'
-  };
+    focusArea: goal.category || 'Общее',
+    hasNoTime: !step.planned_date  // Flag to show "без времени"
+  } as any;
 }
 
 /**
@@ -60,9 +66,19 @@ export function extractTasksFromGoals(goals: Goal[]): Task[] {
  * Filters tasks for today
  */
 export function getTodayTasks(tasks: Task[]): Task[] {
-  return tasks.filter(task =>
-    dayjs(task.dueDate).isSame(dayjs(), 'day')
-  );
+  const today = dayjs().format('YYYY-MM-DD');
+  console.log('[getTodayTasks] Today is:', today);
+  console.log('[getTodayTasks] All tasks:', tasks.map(t => ({
+    title: t.title,
+    dueDate: t.dueDate,
+    dueDateFormatted: dayjs(t.dueDate).format('YYYY-MM-DD')
+  })));
+
+  return tasks.filter(task => {
+    const isSame = dayjs(task.dueDate).isSame(dayjs(), 'day');
+    console.log(`[getTodayTasks] Task "${task.title}" on ${dayjs(task.dueDate).format('YYYY-MM-DD')} is today? ${isSame}`);
+    return isSame;
+  });
 }
 
 /**

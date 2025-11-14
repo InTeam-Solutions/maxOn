@@ -124,6 +124,27 @@ export const CalendarView = () => {
     }
   };
 
+  // Show loading state until data is loaded
+  if (loading) {
+    return (
+      <div className={styles.calendarPage}>
+        <div className="card" style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '400px'
+        }}>
+          <div style={{ textAlign: 'center' }}>
+            <Typography.Title variant="large-strong">Загрузка...</Typography.Title>
+            <Typography.Body variant="medium" style={{ marginTop: '12px', color: 'var(--text-secondary)' }}>
+              Подгружаем события и задачи
+            </Typography.Body>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.calendarPage}>
       {/* View Mode Selector */}

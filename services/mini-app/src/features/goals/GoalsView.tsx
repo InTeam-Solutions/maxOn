@@ -49,7 +49,10 @@ export const GoalsView = () => {
         steps: (g.steps || []).map((s: any) => ({
           id: String(s.id),
           title: s.title,
-          completed: s.status === 'completed'
+          completed: s.status === 'completed',
+          status: s.status,
+          planned_date: s.planned_date,
+          planned_time: s.planned_time
         }))
       }));
 
@@ -88,6 +91,27 @@ export const GoalsView = () => {
   const urlParams = new URLSearchParams(window.location.search);
   const userIdFromUrl = urlParams.get('user_id');
 
+  // Show loading state until data is loaded
+  if (loading) {
+    return (
+      <div className={styles.goalsPage}>
+        <div className="card" style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '400px'
+        }}>
+          <div style={{ textAlign: 'center' }}>
+            <Typography.Title variant="large-strong">Загрузка...</Typography.Title>
+            <Typography.Body variant="medium" style={{ marginTop: '12px', color: 'var(--text-secondary)' }}>
+              Подгружаем ваши цели
+            </Typography.Body>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.goalsPage}>
       <div>
@@ -95,7 +119,7 @@ export const GoalsView = () => {
           Цели
         </Typography.Title>
         <Typography.Body variant="small" className={styles.subtitle}>
-          {loading ? 'Загрузка...' : error ? error : 'Управляй прогрессом и отмечай шаги'}
+          {error ? error : 'Управляй прогрессом и отмечай шаги'}
         </Typography.Body>
         {userIdFromUrl && !USE_REAL_API && (
           <div style={{

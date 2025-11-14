@@ -98,6 +98,15 @@ export const AddTaskModal = ({ onClose, onSuccess, selectedDate }: AddTaskModalP
       // Use current time if not specified
       const finalTime = plannedTime || dayjs().format('HH:mm');
 
+      console.log('[AddTaskModal] Creating step with:', {
+        goal_id: parseInt(goalId),
+        title: title.trim(),
+        planned_date: finalDate,
+        planned_time: finalTime,
+        plannedDateRaw: plannedDate,
+        plannedTimeRaw: plannedTime
+      });
+
       await apiClient.createStep({
         goal_id: parseInt(goalId),
         title: title.trim(),

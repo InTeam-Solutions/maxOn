@@ -140,7 +140,18 @@ export const GoalDetails = ({ goal, onGoalUpdated, onGoalDeleted }: GoalDetailsP
                 disabled={deletingStepId === step.id}
               >
                 <span className={styles.checkbox} aria-hidden />
-                <span>{step.title}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
+                  <span>{step.title}</span>
+                  {(step as any).planned_date && (
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                      📅 {dayjs((step as any).planned_date).format('DD.MM.YYYY')}
+                      {(step as any).planned_time && ` в ${(step as any).planned_time}`}
+                    </span>
+                  )}
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    ID: {step.id} • Статус: {(step as any).status || 'pending'}
+                  </span>
+                </div>
               </button>
               <IconButton
                 size="small"

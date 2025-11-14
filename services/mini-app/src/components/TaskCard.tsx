@@ -18,7 +18,8 @@ const statusLabel: Record<Task['status'], string> = {
 };
 
 export const TaskCard = ({ task, onClick, onDelete, accent = 'blue' }: TaskCardProps) => {
-  const dateLabel = dayjs(task.dueDate).format('DD MMM HH:mm');
+  const hasNoTime = (task as any).hasNoTime;
+  const dateLabel = hasNoTime ? 'без времени' : dayjs(task.dueDate).format('DD MMM HH:mm');
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card click

@@ -72,7 +72,9 @@
       "Bash(open \"https://github.com/orgs/InTeam-Solutions/packages?repo_name=maxOn\")",
       "Bash(open \"https://github.com/orgs/InTeam-Solutions/packages/container/package/maxon-api-gateway\")",
       "Bash(open \"https://github.com/orgs/InTeam-Solutions/packages/container/package/maxon-llm\")",
-      "Bash(open \"https://github.com/orgs/InTeam-Solutions/packages/container/package/maxon-orchestrator\")"
+      "Bash(open \"https://github.com/orgs/InTeam-Solutions/packages/container/package/maxon-orchestrator\")",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)"
     ],
     "deny": [],
     "ask": []

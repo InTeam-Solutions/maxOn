@@ -64,6 +64,11 @@ export const TodayView = () => {
 
       setGoals(transformedGoals);
       console.log('[TodayView] Loaded goals:', transformedGoals);
+
+      // Debug: Check what tasks we extract
+      const tasks = extractTasksFromGoals(transformedGoals);
+      console.log('[TodayView] Extracted tasks:', tasks);
+      console.log('[TodayView] Today tasks:', getTodayTasks(tasks));
     } catch (err) {
       console.error('[TodayView] Failed to load goals:', err);
       setGoals([]);
@@ -110,6 +115,27 @@ export const TodayView = () => {
     setPrompt('');
   };
 
+  // Show loading state until data is loaded
+  if (loading) {
+    return (
+      <div className={styles.today}>
+        <div className="card" style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '400px'
+        }}>
+          <div style={{ textAlign: 'center' }}>
+            <Typography.Title variant="large-strong">Загрузка...</Typography.Title>
+            <Typography.Body variant="medium" style={{ marginTop: '12px', color: 'var(--text-secondary)' }}>
+              Подгружаем ваши цели и задачи
+            </Typography.Body>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.today}>
       <div className="card">
@@ -119,7 +145,7 @@ export const TodayView = () => {
               Главная
             </Typography.Title>
             <Typography.Body variant="medium" className={styles.subtitle}>
-              {loading ? 'Загрузка...' : `${activeGoalsCount} активные цели · ${stepsToday} шагов на сегодня`}
+              {`${activeGoalsCount} активные цели · ${stepsToday} шагов на сегодня`}
             </Typography.Body>
           </div>
           <span className={styles.fireEmoji}>🔥</span>
