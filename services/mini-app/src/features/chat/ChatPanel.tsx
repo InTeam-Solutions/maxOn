@@ -72,10 +72,6 @@ export const ChatPanel = ({ elevated, onClose }: ChatPanelProps) => {
 
   const handleButtonClick = async (button: ChatButton) => {
     // Send button callback_data as a message
-    console.log('[ChatPanel] Button clicked:', button);
-    console.log('[ChatPanel] Button keys:', Object.keys(button));
-    console.log('[ChatPanel] callback_data value:', button.callback_data);
-
     if (!button.callback_data) {
       console.error('[ChatPanel] Button missing callback_data:', button);
       return;
