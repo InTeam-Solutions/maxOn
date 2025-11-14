@@ -57,6 +57,18 @@ async def health():
     return {"status": "healthy", "service": "orchestrator"}
 
 
+@app.post("/api/reset-state")
+async def reset_state(user_id: str):
+    """Reset user's dialog state to IDLE"""
+    try:
+        await update_session_state(user_id, DialogState.IDLE, {})
+        logger.info(f"[{user_id}] State reset to IDLE")
+        return {"status": "success", "message": "State reset to IDLE"}
+    except Exception as e:
+        logger.error(f"Failed to reset state for {user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to reset state")
+
+
 @app.get("/ready")
 async def ready():
     try:

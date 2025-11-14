@@ -146,6 +146,16 @@ class ApiClient {
 
   // ==================== Orchestrator API (Chat) ====================
 
+  async resetChatState(): Promise<void> {
+    try {
+      await this.request<any>(`${this.orchestratorUrl}/api/reset-state?user_id=${this.userId}`, {
+        method: 'POST',
+      });
+    } catch (error) {
+      console.error('[API] Failed to reset chat state:', error);
+    }
+  }
+
   async sendMessage(message: string, context?: any): Promise<any> {
     return this.request<any>(`${this.orchestratorUrl}/api/process`, {
       method: 'POST',

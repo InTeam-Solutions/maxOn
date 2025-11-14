@@ -1,7 +1,8 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { ChatMessage } from '../types/domain';
 import { chatService, type ChatContextPayload } from '../services/chatService';
 import { generateId } from '../utils/id';
+import { apiClient } from '../services/api';
 
 interface ChatContextValue {
   messages: ChatMessage[];
@@ -23,6 +24,11 @@ const welcomeMessage: ChatMessage = {
 export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage]);
   const [isSending, setIsSending] = useState(false);
+
+  // Reset chat state on mount to clear any previous dialog state
+  useEffect(() => {
+    apiClient.resetChatState();
+  }, []);
 
   const sendMessage = async (text: string, context?: ChatContextPayload) => {
     const trimmed = text.trim();

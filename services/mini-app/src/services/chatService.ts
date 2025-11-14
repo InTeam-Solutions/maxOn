@@ -11,11 +11,12 @@ export interface ChatContextPayload {
   progress?: number;
 }
 
-const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
+const USE_REAL_API = import.meta.env.VITE_USE_REAL_API?.trim() === 'true';
 
 // Debug logging
 console.log('[chatService] Environment:', {
   VITE_USE_REAL_API: import.meta.env.VITE_USE_REAL_API,
+  VITE_USE_REAL_API_TRIMMED: import.meta.env.VITE_USE_REAL_API?.trim(),
   USE_REAL_API,
   ORCHESTRATOR_URL: import.meta.env.VITE_ORCHESTRATOR_API_URL
 });
