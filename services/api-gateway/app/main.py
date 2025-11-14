@@ -1424,6 +1424,26 @@ async def on_startup():
     await bot.set_my_commands(*commands)
     logger.info("✅ Bot commands menu set")
 
+    # Set menu button with text
+    try:
+        telegram_api_url = f"https://api.telegram.org/bot{BOT_TOKEN}/setChatMenuButton"
+        menu_button_payload = {
+            "menu_button": {
+                "type": "web_app",
+                "text": "Открыть",
+                "web_app": {
+                    "url": "https://mini-app-alpha-fawn.vercel.app"
+                }
+            }
+        }
+        response = await http_client.post(telegram_api_url, json=menu_button_payload)
+        if response.status_code == 200:
+            logger.info("✅ Menu button set to 'Открыть'")
+        else:
+            logger.warning(f"⚠️ Failed to set menu button: {response.text}")
+    except Exception as e:
+        logger.warning(f"⚠️ Cannot set menu button: {e}")
+
 
 async def on_shutdown():
     logger.info("Shutting down MAX Bot...")
