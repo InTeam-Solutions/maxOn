@@ -147,7 +147,7 @@ export const TodayView = () => {
       </div>
 
       <section>
-        <SectionHeading title="Сегодня позже" subtitle="Что осталось закрыть" />
+        <SectionHeading title="Задачи на сегодня" subtitle={dayjs().format('dddd, DD MMMM')} />
         <div className={styles.list}>
           {tasksToday.map((task) => (
             <TaskCard
