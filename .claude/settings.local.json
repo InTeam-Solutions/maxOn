@@ -67,7 +67,12 @@
       "Bash(railway --help:*)",
       "Bash(railway redeploy --help:*)",
       "Bash(railway redeploy:*)",
-      "Bash(open \"https://mini-app-alpha-fawn.vercel.app?user_id=89578356\")"
+      "Bash(open \"https://mini-app-alpha-fawn.vercel.app?user_id=89578356\")",
+      "Bash(open \"https://github.com/InTeam-Solutions/maxOn/actions\")",
+      "Bash(open \"https://github.com/orgs/InTeam-Solutions/packages?repo_name=maxOn\")",
+      "Bash(open \"https://github.com/orgs/InTeam-Solutions/packages/container/package/maxon-api-gateway\")",
+      "Bash(open \"https://github.com/orgs/InTeam-Solutions/packages/container/package/maxon-llm\")",
+      "Bash(open \"https://github.com/orgs/InTeam-Solutions/packages/container/package/maxon-orchestrator\")"
     ],
     "deny": [],
     "ask": []

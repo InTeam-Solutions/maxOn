@@ -35,18 +35,74 @@ const AttachmentCard = ({ attachment }: { attachment: ChatAttachment }) => {
   );
 };
 
-const ButtonRow = ({ buttons, onButtonClick }: { buttons: ChatButton[]; onButtonClick: (button: ChatButton) => void }) => {
+const ButtonRow = ({
+  buttons,
+  onButtonClick,
+  multiSelect = false,
+  selectedButtons = [],
+  onConfirmSelection
+}: {
+  buttons: ChatButton[];
+  onButtonClick: (button: ChatButton) => void;
+  multiSelect?: boolean;
+  selectedButtons?: string[];
+  onConfirmSelection?: (selected: string[]) => void;
+}) => {
+  const [selected, setSelected] = useState<string[]>(selectedButtons);
+
+  const handleClick = (button: ChatButton) => {
+    if (!multiSelect) {
+      onButtonClick(button);
+      return;
+    }
+
+    // Toggle selection
+    const buttonId = button.callback_data || button.text;
+    setSelected(prev => {
+      if (prev.includes(buttonId)) {
+        return prev.filter(id => id !== buttonId);
+      } else {
+        return [...prev, buttonId];
+      }
+    });
+  };
+
+  const handleConfirm = () => {
+    if (onConfirmSelection) {
+      onConfirmSelection(selected);
+    }
+  };
+
   return (
-    <div className={styles.buttonRow}>
-      {buttons.map((button, index) => (
+    <div className={styles.buttonContainer}>
+      <div className={styles.buttonRow}>
+        {buttons.map((button, index) => {
+          const buttonId = button.callback_data || button.text;
+          const isSelected = selected.includes(buttonId);
+
+          return (
+            <button
+              key={index}
+              className={clsx(
+                styles.chatButton,
+                multiSelect && isSelected && styles.chatButtonSelected
+              )}
+              onClick={() => handleClick(button)}
+            >
+              {multiSelect && isSelected && '✓ '}
+              {button.text}
+            </button>
+          );
+        })}
+      </div>
+      {multiSelect && selected.length > 0 && (
         <button
-          key={index}
-          className={styles.chatButton}
-          onClick={() => onButtonClick(button)}
+          className={styles.confirmButton}
+          onClick={handleConfirm}
         >
-          {button.text}
+          Готово ({selected.length})
         </button>
-      ))}
+      )}
     </div>
   );
 };
@@ -94,6 +150,44 @@ export const ChatPanel = ({ elevated, onClose }: ChatPanelProps) => {
       return;
     }
     await sendCallback(button.callback_data);
+  };
+
+  const handleMultiSelectConfirm = async (selectedCallbacks: string[]) => {
+    // Send all selected callbacks as a combined message
+    // Format: "time_pref:afternoon,evening:27" or send multiple callbacks
+    if (selectedCallbacks.length === 0) return;
+
+    // Combine all selections into one callback
+    const combined = selectedCallbacks.join(',');
+    await sendCallback(combined);
+  };
+
+  // Detect if message requires multi-select based on text or button patterns
+  const isMultiSelectMessage = (message: ChatMessageType): boolean => {
+    const text = message.text.toLowerCase();
+
+    // Check text hints for multi-select
+    if (text.includes('можно выбрать несколько') ||
+        text.includes('выбери несколько') ||
+        text.includes('отметь все')) {
+      return true;
+    }
+
+    // Check button patterns (time_pref, day_select, etc.)
+    if (message.buttons && message.buttons.length > 0) {
+      const firstRow = message.buttons[0];
+      if (firstRow.length > 0 && firstRow[0].callback_data) {
+        const callback = firstRow[0].callback_data;
+        // Patterns that typically allow multi-select
+        if (callback.startsWith('time_pref:') ||
+            callback.startsWith('day_select:') ||
+            callback.startsWith('weekday:')) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   };
 
   const handleScheduleSelect = async (selectedDays: number[], preferredTime: string, messageId: string) => {
@@ -182,7 +276,18 @@ export const ChatPanel = ({ elevated, onClose }: ChatPanelProps) => {
                   // Filter out buttons without callback_data
                   const validButtons = row.filter(btn => btn.callback_data || btn.text);
                   if (validButtons.length === 0) return null;
-                  return <ButtonRow key={rowIndex} buttons={validButtons} onButtonClick={handleButtonClick} />;
+
+                  const multiSelect = isMultiSelectMessage(message);
+
+                  return (
+                    <ButtonRow
+                      key={rowIndex}
+                      buttons={validButtons}
+                      onButtonClick={handleButtonClick}
+                      multiSelect={multiSelect}
+                      onConfirmSelection={multiSelect ? handleMultiSelectConfirm : undefined}
+                    />
+                  );
                 })}
               </div>
             )}

@@ -16,16 +16,21 @@ export interface MaxWebAppInitData {
 }
 
 export interface MaxWebApp {
+  initData?: string; // Raw initData string
   initDataUnsafe?: MaxWebAppInitData;
+  platform?: string; // ios, android, desktop, web
+  version?: string; // MAX app version
   ready: () => void;
-  expand: () => void;
+  expand?: () => void;
   close: () => void;
   onEvent?: (event: string, handler: (...args: unknown[]) => void) => void;
+  offEvent?: (event: string, handler: (...args: unknown[]) => void) => void;
 }
 
 declare global {
   interface Window {
     MaxWebApp?: MaxWebApp;
+    WebApp?: MaxWebApp; // Correct MAX Bridge object name
   }
 }
 

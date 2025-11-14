@@ -20,6 +20,10 @@ class ApiClient {
     }
   }
 
+  getUserId(): string {
+    return this.userId;
+  }
+
   private async request<T>(
     url: string,
     options: RequestInit = {}

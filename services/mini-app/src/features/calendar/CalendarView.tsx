@@ -327,7 +327,8 @@ export const CalendarView = () => {
               const key = day.format('YYYY-MM-DD');
               const isCurrentMonth = day.month() === visibleMonth.month();
               const isSelected = key === selectedDate;
-              const hasAgenda = tasksByDate.has(key);
+              const dayTasks = tasksByDate.get(key) || [];
+              const hasAgenda = dayTasks.length > 0;
               const isToday = day.isSame(dayjs(), 'day');
               return (
                 <button
@@ -337,15 +338,25 @@ export const CalendarView = () => {
                     styles.dayCell,
                     !isCurrentMonth && styles.dimmed,
                     isSelected && styles.active,
-                    isToday && styles.today
+                    isToday && styles.today,
+                    hasAgenda && styles.hasEvents
                   )}
                   onClick={() => {
                     setSelectedDate(key);
                     setVisibleMonth(day.startOf('month'));
                   }}
                 >
-                  <span>{day.format('D')}</span>
-                  {hasAgenda && <span className={styles.marker} />}
+                  <span className={styles.dayCellNumber}>{day.format('D')}</span>
+                  {hasAgenda && (
+                    <div className={styles.eventIndicators}>
+                      {dayTasks.slice(0, 3).map((task, idx) => (
+                        <span key={task.id} className={styles.eventDot} />
+                      ))}
+                      {dayTasks.length > 3 && (
+                        <span className={styles.eventCount}>+{dayTasks.length - 3}</span>
+                      )}
+                    </div>
+                  )}
                 </button>
               );
             })}

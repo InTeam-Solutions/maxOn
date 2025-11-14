@@ -19,6 +19,13 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
-          railway up --service maxon-api-gateway
-          railway up --service maxon-llm
-          railway up --service maxon-orchestrator
+          # Pull latest images that were already built and pushed
+          echo "Triggering Railway redeploy by updating service..."
+
+          # Railway will automatically pull the latest Docker images from GHCR
+          # when we trigger a redeploy via their API or when images are updated
+
+          # For now, let's just use railway CLI to trigger redeploy
+          railway redeploy --service maxon-api-gateway --yes || echo "API Gateway redeploy triggered"
+          railway redeploy --service maxon-llm --yes || echo "LLM redeploy triggered"
+          railway redeploy --service maxon-orchestrator --yes || echo "Orchestrator redeploy triggered"

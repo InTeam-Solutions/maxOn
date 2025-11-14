@@ -42,8 +42,8 @@ docker compose up mini-app
 Создайте `.env` файл в `services/mini-app/`:
 
 ```env
-# MAX WebApp SDK
-VITE_MAX_WEB_APP_SRC=https://static.maxhub.com/sdk/max-web-app.js
+# MAX WebApp SDK (official MAX Bridge URL)
+VITE_MAX_WEB_APP_SRC=https://st.max.ru/js/max-web-app.js
 
 # API URLs
 VITE_CORE_API_URL=http://localhost:8104
@@ -145,8 +145,10 @@ npm run build
 
 Откройте консоль браузера в WebApp:
 ```javascript
-console.log(window.MaxWebApp)
-console.log(window.MaxWebApp.initDataUnsafe)
+console.log(window.WebApp) // Correct MAX Bridge object
+console.log(window.WebApp.initDataUnsafe)
+console.log(window.WebApp.platform)
+console.log(window.WebApp.version)
 ```
 
 Должно показать:
@@ -195,9 +197,10 @@ fetch('http://localhost:8104/health')
 
 ### MAX WebApp SDK не загружается
 
-1. Проверьте что `VITE_MAX_WEB_APP_SRC` правильно установлен
-2. Откройте Network tab в DevTools - должен быть запрос к `https://static.maxhub.com/sdk/max-web-app.js`
-3. Если SDK недоступен, используйте fallback (demo user автоматически)
+1. Проверьте что `VITE_MAX_WEB_APP_SRC` правильно установлен как `https://st.max.ru/js/max-web-app.js`
+2. Откройте Network tab в DevTools - должен быть запрос к `https://st.max.ru/js/max-web-app.js`
+3. Проверьте `window.WebApp` в консоли (не `window.MaxWebApp`)
+4. Если SDK недоступен, используйте fallback (demo user автоматически)
 
 ### API запросы не работают
 

@@ -66,6 +66,34 @@ const buildAttachments = (context?: ChatContextPayload): ChatAttachment[] | unde
   ];
 };
 
+// Normalize buttons: handle both 'callback' and 'callback_data' fields
+function normalizeButtons(buttons: any): ChatButton[][] | undefined {
+  if (!buttons || !Array.isArray(buttons)) {
+    return undefined;
+  }
+
+  console.log('[chatService] Raw buttons from orchestrator:', JSON.stringify(buttons));
+
+  let buttonArray: any[];
+
+  // Check if it's already array of arrays
+  if (buttons.length > 0 && Array.isArray(buttons[0])) {
+    buttonArray = buttons.flat();
+  } else {
+    buttonArray = buttons;
+  }
+
+  // Normalize button fields: orchestrator sends 'callback' but we need 'callback_data'
+  const fixedButtons = buttonArray.map((btn: any) => ({
+    text: btn.text,
+    callback_data: btn.callback_data || btn.callback // Support both field names
+  }));
+
+  const normalized = [fixedButtons];
+  console.log('[chatService] Normalized buttons:', JSON.stringify(normalized));
+  return normalized;
+}
+
 // Mock mode response
 async function sendMockMessage(
   text: string,
@@ -109,19 +137,8 @@ async function sendRealMessage(
     // Log for debugging
     console.log('[chatService] Orchestrator response:', response);
 
-    // Normalize buttons format: ensure it's array of arrays
-    let normalizedButtons: ChatButton[][] | undefined = undefined;
-    if (response.buttons) {
-      if (Array.isArray(response.buttons)) {
-        // Check if it's already array of arrays
-        if (response.buttons.length > 0 && Array.isArray(response.buttons[0])) {
-          normalizedButtons = response.buttons as ChatButton[][];
-        } else {
-          // Convert flat array to array of arrays
-          normalizedButtons = [response.buttons as ChatButton[]];
-        }
-      }
-    }
+    // Normalize buttons format
+    const normalizedButtons = normalizeButtons(response.buttons);
 
     // Check if response contains multiple messages separated by ---SEPARATE---
     if (responseText.includes('---SEPARATE---')) {
@@ -225,16 +242,7 @@ export const chatService = {
       let responseText = response.text || response.response || 'Понял!';
 
       // Normalize buttons
-      let normalizedButtons: ChatButton[][] | undefined = undefined;
-      if (response.buttons) {
-        if (Array.isArray(response.buttons)) {
-          if (response.buttons.length > 0 && Array.isArray(response.buttons[0])) {
-            normalizedButtons = response.buttons as ChatButton[][];
-          } else {
-            normalizedButtons = [response.buttons as ChatButton[]];
-          }
-        }
-      }
+      const normalizedButtons = normalizeButtons(response.buttons);
 
       // Handle message splitting
       if (responseText.includes('---SEPARATE---')) {
