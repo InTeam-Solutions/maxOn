@@ -29,3 +29,4 @@ jobs:
           railway redeploy --service maxon-api-gateway --yes || echo "API Gateway redeploy triggered"
           railway redeploy --service maxon-llm --yes || echo "LLM redeploy triggered"
           railway redeploy --service maxon-orchestrator --yes || echo "Orchestrator redeploy triggered"
+          railway redeploy --service maxon-calendar --yes || echo "Calendar redeploy triggered"
