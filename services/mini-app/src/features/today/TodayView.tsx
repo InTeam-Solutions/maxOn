@@ -30,33 +30,37 @@ export const TodayView = () => {
   const [prompt, setPrompt] = useState('');
   const [goals, setGoals] = useState<Goal[]>([]);
   const [events, setEvents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [showAddGoalModal, setShowAddGoalModal] = useState(false);
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [showAllTasks, setShowAllTasks] = useState(false);
 
   // Load goals and events from API
   useEffect(() => {
-    // Check if userId is configured before loading
-    const userId = apiClient.getUserId();
-    console.log('[TodayView] useEffect - userId:', userId);
+    const loadData = async () => {
+      // Check if userId is configured before loading
+      const userId = apiClient.getUserId();
+      console.log('[TodayView] useEffect - userId:', userId);
 
-    if (!userId) {
-      console.log('[TodayView] userId not yet configured, waiting...');
-      // Retry after a delay to allow apiClient to initialize
-      const timer = setTimeout(() => {
-        const retryUserId = apiClient.getUserId();
-        console.log('[TodayView] Retry - userId:', retryUserId);
-        if (retryUserId) {
-          loadGoals();
-          loadEvents();
-        }
-      }, 200);
-      return () => clearTimeout(timer);
-    }
+      if (!userId) {
+        console.log('[TodayView] userId not yet configured, waiting...');
+        // Retry after a delay to allow apiClient to initialize
+        setTimeout(async () => {
+          const retryUserId = apiClient.getUserId();
+          console.log('[TodayView] Retry - userId:', retryUserId);
+          if (retryUserId) {
+            await Promise.all([loadGoals(), loadEvents()]);
+            setLoading(false);
+          }
+        }, 200);
+        return;
+      }
 
-    loadGoals();
-    loadEvents();
+      await Promise.all([loadGoals(), loadEvents()]);
+      setLoading(false);
+    };
+
+    loadData();
   }, []);
 
   const loadEvents = async () => {
@@ -73,7 +77,6 @@ export const TodayView = () => {
 
   const loadGoals = async () => {
     try {
-      setLoading(true);
       const data = await apiClient.getGoals();
 
       // Transform API response to match UI format
@@ -106,8 +109,6 @@ export const TodayView = () => {
     } catch (err) {
       console.error('[TodayView] Failed to load goals:', err);
       setGoals([]);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -325,24 +326,11 @@ export const TodayView = () => {
           <span className={styles.fireEmoji}>🔥</span>
         </div>
         <div className={styles.miniCalendar}>
-          {calendarDays.map((day) => {
-            const key = day.format('YYYY-MM-DD');
-            const isActive = key === selectedDate;
-            const isToday = key === dayjs().format('YYYY-MM-DD');
-            const hasTasks = tasksByDay.get(key);
-            return (
-              <button
-                key={key}
-                type="button"
-                className={`${styles.calendarDay} ${isActive ? styles.active : ''} ${isToday ? styles.today : ''}`}
-                onClick={() => setSelectedDate(key)}
-              >
-                <span className={styles.calendarWeekday}>{day.format('dd')}</span>
-                <span className={styles.calendarDate}>{day.format('D')}</span>
-                <span className={styles.calendarDot} style={{ opacity: hasTasks ? 1 : 0 }} />
-              </button>
-            );
-          })}
+          <div className={`${styles.calendarDay} ${styles.active} ${styles.today}`}>
+            <span className={styles.calendarWeekday}>{dayjs().format('dd')}</span>
+            <span className={styles.calendarDate}>{dayjs().format('D')}</span>
+            <span className={styles.calendarDot} style={{ opacity: tasksByDay.get(dayjs().format('YYYY-MM-DD')) ? 1 : 0 }} />
+          </div>
         </div>
       </div>
 

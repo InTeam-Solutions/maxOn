@@ -84,7 +84,9 @@
       "Bash(railway variables:*)",
       "Bash(railway run:*)",
       "Bash(PGPASSWORD=mYKIbBZmfIykZHKUuzCwcCrSJhJskpbJ psql:*)",
-      "Bash(jobs:*)"
+      "Bash(jobs:*)",
+      "Bash(tree:*)",
+      "Bash(.gitignore)"
     ],
     "deny": [],
     "ask": []

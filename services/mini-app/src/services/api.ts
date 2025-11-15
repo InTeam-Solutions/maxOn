@@ -12,16 +12,36 @@ class ApiClient {
   private userId: string = '';
   private coreUrl: string = CORE_API_URL;
   private orchestratorUrl: string = ORCHESTRATOR_API_URL;
+  private readyCallbacks: Array<() => void> = [];
+  private isReady: boolean = false;
 
   configure(config: ApiConfig) {
     this.userId = config.userId;
     if (config.baseUrl) {
       this.coreUrl = config.baseUrl;
     }
+    this.isReady = true;
+
+    // Notify all waiting callbacks
+    this.readyCallbacks.forEach(cb => cb());
+    this.readyCallbacks = [];
   }
 
   getUserId(): string {
     return this.userId;
+  }
+
+  /**
+   * Returns a promise that resolves when the API client is configured with a user ID
+   */
+  waitUntilReady(): Promise<void> {
+    if (this.isReady && this.userId) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      this.readyCallbacks.push(resolve);
+    });
   }
 
   private async request<T>(
