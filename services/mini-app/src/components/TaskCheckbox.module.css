@@ -1,9 +1,11 @@
 .checkbox {
-  width: 20px;
-  height: 20px;
-  border: 2px solid var(--border-primary);
-  border-radius: 4px;
-  background: transparent;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  border: 2px solid #8b5cf6;
+  border-radius: 6px;
+  background: rgba(139, 92, 246, 0.1);
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
@@ -11,6 +13,8 @@
   justify-content: center;
   flex-shrink: 0;
   padding: 0;
+  position: relative;
+  z-index: 10;
 }
 
 .checkbox:hover:not(:disabled) {
