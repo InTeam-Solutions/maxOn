@@ -5,7 +5,7 @@
 ## Требования
 
 1. **Docker Desktop** - установите с [docker.com](https://www.docker.com/products/docker-desktop/)
-2. **Telegram Bot Token** - получите от [@BotFather](https://t.me/BotFather)
+2. **MAX Bot Token** - получите от разработчиков
 3. **OpenAI API Key** - получите на [platform.openai.com](https://platform.openai.com/api-keys)
 
 ## Быстрый старт
@@ -16,7 +16,7 @@
 
 ```bash
 # Замените на ваш токен от @BotFather
-MAX_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN_HERE
+MAX_BOT_TOKEN=YOUR_MAX_BOT_TOKEN_HERE
 
 # Замените на ваш OpenAI API ключ
 OPENAI_API_KEY=YOUR_OPENAI_API_KEY_HERE
@@ -38,7 +38,7 @@ docker compose up -d
 Это запустит все сервисы:
 - PostgreSQL (база данных)
 - Redis (кеш)
-- API Gateway (Telegram бот)
+- API Gateway (MAX бот)
 - Orchestrator (координатор)
 - LLM Service (обработка языка)
 - Core Service (бизнес-логика)
@@ -68,7 +68,7 @@ docker compose logs -f | grep ERROR
 
 ### 4. Используйте бота
 
-Откройте Telegram и отправьте `/start` вашему боту!
+Откройте MAX и отправьте `/start` вашему боту!
 
 ## Команды управления
 
@@ -103,7 +103,7 @@ docker compose up -d
 ```
 local-install/
 ├── services/              # Все микросервисы
-│   ├── api-gateway/      # Telegram бот (порт не открыт наружу)
+│   ├── api-gateway/      # MAX бот (порт не открыт наружу)
 │   ├── orchestrator/     # Координатор запросов (8001)
 │   ├── llm/             # LLM обработка (8003)
 │   ├── core/            # Бизнес-логика (8004)
@@ -169,13 +169,6 @@ http://localhost:7132/calendar/external/user/{user_id}/events.ics
 1. Проверьте что `OPENAI_API_KEY` правильный в `.env`
 2. Проверьте баланс на OpenAI аккаунте
 3. Проверьте логи: `docker compose logs llm`
-
-### Порты заняты
-Если порт уже используется, измените его в `docker-compose.yml`:
-```yaml
-ports:
-  - "НОВЫЙ_ПОРТ:СТАРЫЙ_ПОРТ"
-```
 
 ## Обновление
 

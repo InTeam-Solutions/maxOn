@@ -9,12 +9,7 @@ https://www.docker.com/products/docker-desktop/
 
 ШАГ 2: ПОЛУЧИТЕ API КЛЮЧИ
 --------------------------
-1. Telegram Bot Token:
-   - Откройте Telegram
-   - Найдите @BotFather
-   - Отправьте /newbot
-   - Следуйте инструкциям
-   - Скопируйте полученный токен
+1. Max Bot Token:
 
 2. OpenAI API Key:
    - Зайдите на https://platform.openai.com/api-keys
@@ -25,9 +20,7 @@ https://www.docker.com/products/docker-desktop/
 ---------------------------
 Откройте файл .env в этой папке и замените:
 
-MAX_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN_HERE
-   ↓
-MAX_BOT_TOKEN=ваш_токен_от_BotFather
+MAX_BOT_TOKEN=ваш_токен
 
 OPENAI_API_KEY=YOUR_OPENAI_API_KEY_HERE
    ↓
@@ -39,7 +32,7 @@ OPENAI_API_KEY=ваш_ключ_OpenAI
 ----------------
 Откройте терминал в этой папке и выполните:
 
-    docker compose up -d
+    docker compose up -d --build
 
 Подождите 2-3 минуты пока все сервисы запустятся.
 
@@ -53,7 +46,8 @@ OPENAI_API_KEY=ваш_ключ_OpenAI
 
 ШАГ 6: ИСПОЛЬЗУЙТЕ БОТА
 -----------------------
-Откройте Telegram и отправьте /start вашему боту!
+https://max.ru/t623_hakaton_bot
+Откройте MAX и отправьте /start вашему боту!
 
 ====================================
 
