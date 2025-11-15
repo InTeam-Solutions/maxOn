@@ -1559,14 +1559,20 @@ async def on_shutdown():
 
 
 async def main():
+    from app.health_server import start_health_server
+
     try:
         await bot.delete_webhook()
     except Exception as e:
         logger.warning(f"Could not delete webhook: {e}")
 
+    # Start health check server in background
+    health_runner = await start_health_server(port=8080)
+
     try:
         await dp.start_polling(bot)
     finally:
+        await health_runner.cleanup()
         await on_shutdown()
 
 
