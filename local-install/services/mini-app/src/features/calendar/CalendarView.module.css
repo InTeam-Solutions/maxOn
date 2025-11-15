@@ -1,0 +1,646 @@
+.calendarPage {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* View Mode Selector */
+.viewModeSelector {
+  display: flex;
+  gap: 8px;
+  background: var(--bg-soft);
+  padding: 4px;
+  border-radius: 12px;
+  width: fit-content;
+}
+
+.viewModeButton {
+  padding: 8px 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.viewModeButton.active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.monthHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.dayCell {
+  border: none;
+  border-radius: 12px;
+  padding: 8px 4px;
+  background: var(--bg-soft);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 60px;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.dayCell:hover {
+  background: var(--bg-hover);
+  transform: scale(1.05);
+}
+
+.dayCell.active {
+  border: 2px solid var(--accent-blue);
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
+
+.dayCell.dimmed {
+  opacity: 0.4;
+}
+
+.dayCell.today {
+  background: var(--accent-primary);
+  color: white;
+  font-weight: 700;
+}
+
+.dayCell.hasEvents {
+  background: linear-gradient(135deg, var(--bg-soft), rgba(99, 102, 241, 0.05));
+}
+
+.dayCell.today.hasEvents {
+  background: var(--accent-primary);
+}
+
+.dayCellNumber {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+/* Event Indicators */
+.eventIndicators {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: auto;
+}
+
+.eventDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  display: inline-block;
+  box-shadow: 0 0 4px rgba(99, 102, 241, 0.5);
+}
+
+.dayCell.today .eventDot {
+  background: white;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+}
+
+.eventCount {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--accent-primary);
+  margin-left: 2px;
+}
+
+.dayCell.today .eventCount {
+  color: white;
+}
+
+/* Legacy marker (keep for backwards compatibility) */
+.marker {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: var(--accent-green);
+  border-radius: 50%;
+  margin-top: 6px;
+}
+
+/* Day View - Timeline */
+.dayViewContainer {
+  padding: 16px 0;
+}
+
+.dayHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 0 16px;
+}
+
+.timelineContainer {
+  display: flex;
+  gap: 0;
+  position: relative;
+  height: 1440px; /* 24 hours * 60px per hour */
+  overflow-y: auto;
+  border-top: 1px solid var(--border-soft);
+}
+
+.timeColumn {
+  flex-shrink: 0;
+  width: 70px;
+  border-right: 1px solid var(--border-soft);
+}
+
+.hourSlot {
+  height: 60px;
+  border-bottom: 1px solid var(--border-soft);
+  display: flex;
+  align-items: flex-start;
+  padding-top: 4px;
+  padding-left: 8px;
+}
+
+.hourLabel {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.eventsColumn {
+  flex: 1;
+  position: relative;
+  border-right: 1px solid var(--border-soft);
+}
+
+.currentTimeLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent-primary);
+  z-index: 10;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
+}
+
+.currentTimeLine::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+}
+
+.dayEventCard {
+  position: absolute;
+  /* left and width are set dynamically via inline styles for column layout */
+  min-height: 50px;
+  background: linear-gradient(135deg, var(--accent-primary), rgba(139, 92, 246, 0.8));
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+  box-sizing: border-box;
+}
+
+.dayEventCard:hover {
+  transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.5);
+}
+
+.dayEventHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.dayEventTime {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.dayEventTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+
+/* Week View */
+.weekHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.weekGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.weekDayColumn {
+  background: var(--bg-soft);
+  border-radius: 12px;
+  padding: 12px 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.weekDayColumn:hover {
+  background: var(--bg-hover);
+  transform: translateY(-2px);
+}
+
+.weekDayColumn.todayColumn {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+  border: 2px solid var(--accent-primary);
+}
+
+.weekDayColumn.selectedColumn {
+  border: 2px solid var(--accent-blue);
+}
+
+.weekDayHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.weekDayName {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.weekDayNumber {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.weekDayNumber.todayNumber {
+  color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.1);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.weekDayEvents {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.noEvents {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 18px;
+  padding: 20px 0;
+}
+
+.weekEventCard {
+  background: var(--bg-elevated);
+  border-radius: 8px;
+  padding: 8px;
+  border-left: 3px solid var(--accent-primary);
+  transition: all 0.2s ease;
+}
+
+.weekEventCard:hover {
+  background: var(--bg-hover);
+  transform: translateX(2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.weekEventHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.weekEventTime {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.weekEventTitle {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agendaSubtitle {
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.agendaList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.agendaItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--bg-soft);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  gap: 12px;
+  transition: all var(--transition-base);
+}
+
+.deadlineAgendaItem {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.05));
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.1);
+}
+
+.deadlineAgendaItem:hover {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(220, 38, 38, 0.08));
+  border-color: rgba(239, 68, 68, 0.4);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.2), 0 4px 12px rgba(239, 68, 68, 0.15);
+}
+
+.deadlineIconAgenda {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+  margin-right: 12px;
+}
+
+.agendaCheckboxContainer {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-right: 12px;
+}
+
+/* Deadline styles for Day view */
+.deadlineDayCard {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(220, 38, 38, 0.1)) !important;
+  border-left: 3px solid #ef4444 !important;
+}
+
+/* Deadline styles for Week view */
+.deadlineWeekCard {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(220, 38, 38, 0.08)) !important;
+  border-left: 2px solid #ef4444 !important;
+}
+
+/* Deadline dot in Month view */
+.deadlineDot {
+  background: #ef4444 !important;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.6) !important;
+}
+
+.agendaContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.agendaMeta {
+  color: var(--text-secondary);
+}
+
+.agendaActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.emptyState {
+  padding: 24px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.actionsRow {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  /* View Mode Selector - Stack vertically on mobile */
+  .viewModeSelector {
+    width: 100%;
+  }
+
+  .viewModeButton {
+    flex: 1;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+
+  /* Week View - Reduce to 3-4 days visible, horizontal scroll */
+  .weekGrid {
+    grid-template-columns: repeat(7, minmax(140px, 1fr));
+    overflow-x: auto;
+    overflow-y: visible;
+    gap: 6px;
+    padding-bottom: 8px;
+    /* Smooth scrolling */
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .weekGrid::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  .weekGrid::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .weekGrid::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+  }
+
+  .weekDayColumn {
+    min-width: 130px;
+    padding: 10px 6px;
+  }
+
+  .weekDayHeader {
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+  }
+
+  .weekDayName {
+    font-size: 10px;
+  }
+
+  .weekDayNumber {
+    font-size: 18px;
+  }
+
+  .weekDayNumber.todayNumber {
+    width: 28px;
+    height: 28px;
+  }
+
+  .weekEventCard {
+    padding: 6px;
+  }
+
+  .weekEventTime {
+    font-size: 10px;
+  }
+
+  .weekEventTitle {
+    font-size: 12px;
+  }
+
+  /* Day View - Reduce timeline height on mobile */
+  .timelineContainer {
+    height: 1200px; /* Reduce from 1440px */
+  }
+
+  .timeColumn {
+    width: 60px; /* Reduce from 70px */
+  }
+
+  .hourSlot {
+    height: 50px; /* Reduce from 60px */
+  }
+
+  .hourLabel {
+    font-size: 11px;
+  }
+
+  .dayEventCard {
+    padding: 6px 10px;
+    min-height: 45px;
+  }
+
+  .dayEventTime {
+    font-size: 11px;
+  }
+
+  .dayEventTitle {
+    font-size: 13px;
+  }
+
+  /* Month View - Smaller cells on mobile */
+  .grid {
+    gap: 4px;
+  }
+
+  .dayCell {
+    padding: 6px 2px;
+    min-height: 50px;
+  }
+
+  .dayCellNumber {
+    font-size: 14px;
+  }
+
+  .eventIndicators {
+    gap: 2px;
+  }
+
+  .eventDot {
+    width: 4px;
+    height: 4px;
+  }
+
+  .eventCount {
+    font-size: 8px;
+  }
+
+  .marker {
+    width: 4px;
+    height: 4px;
+    margin-top: 3px;
+  }
+
+  /* Agenda Items */
+  .agendaItem {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 12px;
+  }
+
+  .agendaActions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+

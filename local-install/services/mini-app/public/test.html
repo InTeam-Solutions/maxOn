@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MaxOn Mini-App Test</title>
+    <script src="https://static.maxhub.com/sdk/max-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0e1a;
+            color: #ffffff;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #3b82f6;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        h2 {
+            color: #8b5cf6;
+            margin: 30px 0 15px;
+            font-size: 18px;
+        }
+        .section {
+            background: #151b2b;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        .label {
+            color: #94a3b8;
+            font-weight: 500;
+        }
+        .value {
+            color: #ffffff;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        button {
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 5px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid #ef4444;
+            color: #ef4444;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .success {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid #10b981;
+            color: #10b981;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        pre {
+            background: #0a0e1a;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .loading {
+            color: #94a3b8;
+            font-style: italic;
+        }
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 MaxOn Mini-App Test Interface</h1>
+
+        <div class="section">
+            <h2>📱 MAX WebApp Info</h2>
+            <div id="webAppInfo">
+                <div class="loading">Загрузка SDK...</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>👤 User Info</h2>
+            <div id="userInfo">
+                <div class="loading">Ожидание данных пользователя...</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🎯 API Requests</h2>
+            <div class="button-group">
+                <button onclick="loadGoals()">Загрузить цели</button>
+                <button onclick="loadEvents()">Загрузить события</button>
+                <button onclick="sendChatMessage()">Отправить сообщение в чат</button>
+            </div>
+            <div id="apiResults"></div>
+        </div>
+
+        <div class="section">
+            <h2>🔍 Raw Data (Debug)</h2>
+            <button onclick="showRawData()">Показать initDataUnsafe</button>
+            <pre id="rawData"></pre>
+        </div>
+    </div>
+
+    <script>
+        const CORE_API_URL = 'http://localhost:8104';
+        const ORCHESTRATOR_API_URL = 'http://localhost:8101';
+        const DEMO_USER_ID = '89578356';
+
+        let userId = DEMO_USER_ID;
+        let webApp = null;
+
+        // Initialize MAX WebApp SDK
+        function initializeWebApp() {
+            if (typeof window.MaxWebApp !== 'undefined') {
+                webApp = window.MaxWebApp;
+                webApp.ready();
+                displayWebAppInfo();
+                displayUserInfo();
+                return true;
+            }
+            return false;
+        }
+
+        // Display WebApp SDK info
+        function displayWebAppInfo() {
+            const info = document.getElementById('webAppInfo');
+            const isAvailable = webApp !== null;
+
+            info.innerHTML = `
+                <div class="info-row">
+                    <span class="label">SDK Status:</span>
+                    <span class="value" style="color: ${isAvailable ? '#10b981' : '#ef4444'}">
+                        ${isAvailable ? '✅ Loaded' : '❌ Not available'}
+                    </span>
+                </div>
+                <div class="info-row">
+                    <span class="label">Platform:</span>
+                    <span class="value">${webApp?.platform || 'unknown'}</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">Version:</span>
+                    <span class="value">${webApp?.version || 'unknown'}</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">Is Expanded:</span>
+                    <span class="value">${webApp?.isExpanded ? 'Yes' : 'No'}</span>
+                </div>
+            `;
+        }
+
+        // Display user info
+        function displayUserInfo() {
+            const info = document.getElementById('userInfo');
+            const user = webApp?.initDataUnsafe?.user;
+
+            if (user) {
+                userId = String(user.id);
+                info.innerHTML = `
+                    <div class="success">✅ Пользователь авторизован через MAX WebApp</div>
+                    <div class="info-row">
+                        <span class="label">User ID:</span>
+                        <span class="value">${user.id}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">First Name:</span>
+                        <span class="value">${user.first_name || 'N/A'}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Last Name:</span>
+                        <span class="value">${user.last_name || 'N/A'}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Username:</span>
+                        <span class="value">@${user.username || 'N/A'}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Language:</span>
+                        <span class="value">${user.language_code || 'N/A'}</span>
+                    </div>
+                `;
+            } else {
+                info.innerHTML = `
+                    <div class="error">⚠️ MAX WebApp SDK не загружен или нет данных пользователя</div>
+                    <div class="info-row">
+                        <span class="label">Используется Demo User ID:</span>
+                        <span class="value">${DEMO_USER_ID}</span>
+                    </div>
+                    <p style="margin-top: 15px; color: #94a3b8;">
+                        Для получения реальных данных открой эту страницу через MAX messenger WebApp.
+                    </p>
+                `;
+            }
+        }
+
+        // Show raw initDataUnsafe
+        function showRawData() {
+            const rawData = document.getElementById('rawData');
+            if (webApp?.initDataUnsafe) {
+                rawData.textContent = JSON.stringify(webApp.initDataUnsafe, null, 2);
+            } else {
+                rawData.textContent = 'MAX WebApp SDK не загружен или нет данных';
+            }
+        }
+
+        // Load user goals
+        async function loadGoals() {
+            const resultsDiv = document.getElementById('apiResults');
+            resultsDiv.innerHTML = '<div class="loading">⏳ Загрузка целей...</div>';
+
+            try {
+                const response = await fetch(`${CORE_API_URL}/api/goals?user_id=${userId}`);
+                const data = await response.json();
+
+                resultsDiv.innerHTML = `
+                    <div class="success">✅ Получено целей: ${data.length}</div>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="error">❌ Ошибка загрузки целей: ${error.message}</div>
+                    <p style="margin-top: 10px; color: #94a3b8;">
+                        Убедись что бэкенд запущен на localhost:8104
+                    </p>
+                `;
+            }
+        }
+
+        // Load user events
+        async function loadEvents() {
+            const resultsDiv = document.getElementById('apiResults');
+            resultsDiv.innerHTML = '<div class="loading">⏳ Загрузка событий...</div>';
+
+            try {
+                const response = await fetch(`${CORE_API_URL}/api/events?user_id=${userId}`);
+                const data = await response.json();
+
+                resultsDiv.innerHTML = `
+                    <div class="success">✅ Получено событий: ${data.length}</div>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="error">❌ Ошибка загрузки событий: ${error.message}</div>
+                    <p style="margin-top: 10px; color: #94a3b8;">
+                        Убедись что бэкенд запущен на localhost:8104
+                    </p>
+                `;
+            }
+        }
+
+        // Send chat message
+        async function sendChatMessage() {
+            const resultsDiv = document.getElementById('apiResults');
+            resultsDiv.innerHTML = '<div class="loading">⏳ Отправка сообщения...</div>';
+
+            try {
+                const response = await fetch(`${ORCHESTRATOR_API_URL}/api/process`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        message: 'Покажи мои цели',
+                        context: {}
+                    })
+                });
+                const data = await response.json();
+
+                resultsDiv.innerHTML = `
+                    <div class="success">✅ Ответ получен</div>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="error">❌ Ошибка отправки сообщения: ${error.message}</div>
+                    <p style="margin-top: 10px; color: #94a3b8;">
+                        Убедись что orchestrator запущен на localhost:8101
+                    </p>
+                `;
+            }
+        }
+
+        // Initialize on load
+        window.addEventListener('load', () => {
+            // Try to initialize immediately
+            if (!initializeWebApp()) {
+                // If not available, wait for SDK to load
+                setTimeout(() => {
+                    if (!initializeWebApp()) {
+                        displayWebAppInfo();
+                        displayUserInfo();
+                    }
+                }, 1000);
+            }
+        });
+    </script>
+</body>
+</html>

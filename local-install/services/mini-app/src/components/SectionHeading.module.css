@@ -1,0 +1,23 @@
+.wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.title {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.subtitle {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-top: 2px;
+}
+
+.action {
+  font-size: 12px;
+  color: var(--accent-blue);
+}
+

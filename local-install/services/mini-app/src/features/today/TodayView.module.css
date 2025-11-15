@@ -1,0 +1,271 @@
+.today {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+}
+
+.headingGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.title {
+  display: block;
+}
+
+.subtitle {
+  color: var(--text-secondary);
+  display: block;
+  margin-top: 4px;
+}
+
+.fireEmoji {
+  font-size: 24px;
+}
+
+.miniCalendar {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
+  gap: 10px;
+}
+
+.calendarDay {
+  flex: 1;
+  text-align: center;
+  border-radius: 14px;
+  border: var(--border-subtle);
+  background: var(--bg-subtle);
+  padding: 12px 6px;
+  height: 70px;
+  box-sizing: border-box;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 2px;
+}
+
+.calendarDay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--gradient-glow);
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.calendarDay:hover {
+  border-color: var(--border-soft);
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+}
+
+.calendarDay.active {
+  border-color: var(--accent-primary);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.08));
+  color: var(--text-primary);
+  box-shadow: var(--shadow-glow);
+}
+
+.calendarDay.active::before {
+  opacity: 1;
+}
+
+.calendarDay.today::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  background: var(--accent-success);
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.8);
+  z-index: 2;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.2);
+  }
+}
+
+.calendarWeekday {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+  z-index: 1;
+  line-height: 1;
+}
+
+.calendarDate {
+  font-size: 20px;
+  font-weight: 700;
+  z-index: 1;
+  line-height: 1;
+}
+
+.calendarDot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  display: block;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.6);
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.taskList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.taskItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-elevated);
+  border: var(--border-soft);
+  border-radius: var(--card-radius);
+  padding: 12px;
+  transition: all var(--transition-base);
+}
+
+.taskItem:hover {
+  background: var(--bg-soft);
+  border-color: var(--border-medium);
+}
+
+.deadlineItem {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.05));
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.1);
+}
+
+.deadlineItem:hover {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(220, 38, 38, 0.08));
+  border-color: rgba(239, 68, 68, 0.4);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.2), 0 4px 12px rgba(239, 68, 68, 0.15);
+}
+
+.deadlineIcon {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.taskContent {
+  flex: 1;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.taskMeta {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.showMoreButton {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.placeholder {
+  padding: 24px;
+  border-radius: var(--card-radius);
+  background: var(--bg-subtle);
+  border: var(--border-subtle);
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 14px;
+}
+
+.actionsRow {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.gradientButton {
+  background: var(--gradient-primary);
+  border: none;
+  padding: 12px 24px;
+  border-radius: var(--button-radius);
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: var(--shadow-glow);
+  transition: all var(--transition-base);
+}
+
+.gradientButton:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-glow), var(--shadow-md);
+}
+
+.gradientButton:active {
+  transform: translateY(0);
+}
+
+.promptBox {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  background: var(--bg-elevated);
+  border-radius: var(--card-radius);
+  padding: 16px;
+  border: var(--border-soft);
+  backdrop-filter: blur(12px);
+}
+
+@media (max-width: 600px) {
+  .miniCalendar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+
+  .promptBox {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

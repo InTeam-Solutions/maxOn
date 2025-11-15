@@ -1,0 +1,10 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "services/calendar/Dockerfile"
+watchPatterns = ["services/calendar/**"]
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

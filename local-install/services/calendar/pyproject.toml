@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "maxon-calendar"
+version = "0.1.0"
+description = "Minimal calendar service MVP with FastAPI, PostgreSQL, and iCal feed"
+authors = ["Codex <codex@example.com>"]
+readme = "README.md"
+packages = [{ include = "app" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.109.0"
+uvicorn = { extras = ["standard"], version = "^0.24.0" }
+sqlalchemy = "^2.0.25"
+asyncpg = "^0.29.0"
+psycopg = { extras = ["binary"], version = "^3.1.16" }
+psycopg2-binary = "^2.9.9"
+pydantic-settings = "^2.1.0"
+python-dotenv = "^1.0.0"
+icalendar = "^5.0.11"
+alembic = "^1.12.1"
+httpx = "^0.26.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+pytest-asyncio = "^0.23.2"
+
+[build-system]
+requires = ["poetry-core>=1.7.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

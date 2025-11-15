@@ -1,0 +1,43 @@
+.checkbox {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  border: 2px solid #8b5cf6;
+  border-radius: 6px;
+  background: rgba(139, 92, 246, 0.1);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  position: relative;
+  z-index: 10;
+}
+
+.checkbox:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  background: rgba(139, 92, 246, 0.1);
+}
+
+.checkbox.checked {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+}
+
+.checkbox.loading {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.checkbox:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.checkbox svg {
+  display: block;
+}
