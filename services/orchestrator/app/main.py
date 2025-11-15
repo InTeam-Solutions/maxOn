@@ -201,6 +201,38 @@ async def execute_intent(intent: str, params: Dict[str, Any], user_id: str) -> D
         endpoint = "/api/events"
         action = intent.split(".")[1]  # search, create, update, delete, mutate
 
+        # Adapter: event.mutate_batch → multiple event.create
+        if action == "mutate_batch":
+            events = params.get("events", [])
+            if not events:
+                return {"success": False, "error": "No events provided"}
+
+            created_events = []
+            errors = []
+
+            for event_data in events:
+                try:
+                    create_params = {
+                        "title": event_data.get("title"),
+                        "date": event_data.get("date"),
+                        "time": event_data.get("time"),
+                        "notes": event_data.get("notes"),
+                    }
+                    # Remove None values
+                    create_params = {k: v for k, v in create_params.items() if v is not None}
+                    response = http_client.post(f"{CORE_SERVICE_URL}{endpoint}", json={**create_params, "user_id": user_id})
+                    created_events.append(response.json())
+                except Exception as e:
+                    errors.append({"event": event_data, "error": str(e)})
+
+            return {
+                "success": len(created_events) > 0,
+                "created": created_events,
+                "errors": errors,
+                "total": len(events),
+                "created_count": len(created_events)
+            }
+
         # Adapter: event.mutate → event.create/update/delete
         if action == "mutate":
             operation = params.get("operation", "create")

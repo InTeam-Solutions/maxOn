@@ -112,6 +112,26 @@ SYSTEM_PROMPT_TEMPLATE = Template("""
   "new_notes": "<строка или null>"
 }
 
+3a) event.mutate_batch (ТОЛЬКО для создания НЕСКОЛЬКИХ событий за раз)
+{
+  "intent": "event.mutate_batch",
+  "text": "Создание нескольких событий",
+  "events": [
+    {
+      "title": "<название события>",
+      "date": "YYYY-MM-DD",
+      "time": "HH:MM" | null,
+      "notes": "<описание>" | null
+    },
+    ...
+  ]
+}
+
+ВАЖНО: Используй event.mutate_batch ТОЛЬКО когда пользователь явно просит добавить расписание/список из нескольких событий!
+Примеры:
+"Добавить в календарь" (после списка событий) → event.mutate_batch
+"Добавь эти события" (после расписания) → event.mutate_batch
+
 4) goal.create (создание новой цели)
 {
   "intent": "goal.create",
