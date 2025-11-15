@@ -1,6 +1,6 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "services/api-gateway/Dockerfile"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "python -m app.main"
