@@ -44,6 +44,7 @@ export function stepToTask(
 
 /**
  * Extracts all tasks from goals (steps with planned_date)
+ * Excludes steps that are already linked to calendar events (to avoid duplicates)
  */
 export function extractTasksFromGoals(goals: Goal[]): Task[] {
   const tasks: Task[] = [];
@@ -52,6 +53,16 @@ export function extractTasksFromGoals(goals: Goal[]): Task[] {
     if (!goal.steps) continue;
 
     for (const step of goal.steps) {
+      // Skip steps that are already linked to events
+      if (step.linked_event_id) {
+        console.log('[extractTasksFromGoals] Skipping step linked to event:', {
+          stepId: step.id,
+          stepTitle: step.title,
+          linkedEventId: step.linked_event_id
+        });
+        continue;
+      }
+
       const task = stepToTask(step, goal);
       if (task) {
         tasks.push(task);

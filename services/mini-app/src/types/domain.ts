@@ -5,6 +5,9 @@ export interface GoalStep {
   title: string;
   completed: boolean;
   status?: string; // Backend status: 'pending' | 'in_progress' | 'completed'
+  linked_event_id?: number | null; // Link to calendar event if step is scheduled
+  planned_date?: string | null; // When this step is scheduled (YYYY-MM-DD)
+  planned_time?: string | null; // Time of day for this step (HH:MM:SS)
 }
 
 export interface Goal {
