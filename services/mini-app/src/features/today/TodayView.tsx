@@ -38,26 +38,18 @@ export const TodayView = () => {
   // Load goals and events from API
   useEffect(() => {
     const loadData = async () => {
-      // Check if userId is configured before loading
-      const userId = apiClient.getUserId();
-      console.log('[TodayView] useEffect - userId:', userId);
+      try {
+        // Wait for apiClient to be configured with userId
+        await apiClient.waitUntilReady();
+        console.log('[TodayView] API client ready, loading data...');
 
-      if (!userId) {
-        console.log('[TodayView] userId not yet configured, waiting...');
-        // Retry after a delay to allow apiClient to initialize
-        setTimeout(async () => {
-          const retryUserId = apiClient.getUserId();
-          console.log('[TodayView] Retry - userId:', retryUserId);
-          if (retryUserId) {
-            await Promise.all([loadGoals(), loadEvents()]);
-            setLoading(false);
-          }
-        }, 200);
-        return;
+        // Load goals and events in parallel
+        await Promise.all([loadGoals(), loadEvents()]);
+      } catch (error) {
+        console.error('[TodayView] Failed to load data:', error);
+      } finally {
+        setLoading(false);
       }
-
-      await Promise.all([loadGoals(), loadEvents()]);
-      setLoading(false);
     };
 
     loadData();
