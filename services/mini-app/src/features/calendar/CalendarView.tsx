@@ -114,7 +114,8 @@ export const CalendarView = () => {
           completed: s.status === 'completed',
           status: s.status,
           planned_date: s.planned_date,
-          planned_time: s.planned_time
+          planned_time: s.planned_time,
+          linked_event_id: s.linked_event_id
         }))
       }));
 
