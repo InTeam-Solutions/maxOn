@@ -232,20 +232,35 @@ export const CalendarView = () => {
 
   // Convert events to Task format
   const eventTasks = useMemo(() => {
-    return events.map((event) => ({
-      id: `event-${event.id}`,
-      title: event.title,
-      goalId: '', // Events don't belong to goals
-      goalTitle: event.notes ? 'Событие' : 'Событие',
-      dueDate: event.time
-        ? dayjs(`${event.date}T${event.time}`).toISOString()
-        : dayjs(event.date).toISOString(),
-      status: 'scheduled' as const,
-      focusArea: 'События',
-      isEvent: true, // Flag to distinguish events from goal tasks
-      eventData: event // Store original event data
-    }));
-  }, [events]);
+    return events.map((event) => {
+      // Find the goal if this event is linked to one
+      let goalTitle = 'Событие';
+      let goalId = '';
+
+      if (event.event_type === 'goal_step' && event.linked_goal_id) {
+        const linkedGoal = goals.find(g => String(g.id) === String(event.linked_goal_id));
+        if (linkedGoal) {
+          goalTitle = linkedGoal.title;
+          goalId = String(linkedGoal.id);
+        }
+      }
+
+      return {
+        id: `event-${event.id}`,
+        title: event.title,
+        goalId,
+        goalTitle,
+        dueDate: event.time
+          ? dayjs(`${event.date}T${event.time}`).toISOString()
+          : dayjs(event.date).toISOString(),
+        status: 'scheduled' as const,
+        focusArea: goalId ? 'Цели' : 'События',
+        isEvent: true,
+        eventData: event,
+        stepId: event.linked_step_id ? String(event.linked_step_id) : undefined
+      };
+    });
+  }, [events, goals]);
 
   // Extract tasks from goals (steps with planned_date)
   const goalTasks = useMemo(() => extractTasksFromGoals(goals), [goals]);
@@ -342,17 +357,11 @@ export const CalendarView = () => {
   // Handle checkbox toggle for tasks/events
   const handleToggleTask = async (task: Task, newStatus: 'done' | 'scheduled') => {
     const isEvent = task.isEvent;
-    const isGoalTask = !isEvent && task.stepId && task.goalId;
+    const isLinkedToGoal = task.stepId && task.goalId;
 
     try {
-      if (isEvent) {
-        // For standalone events, we don't have completion tracking yet
-        // Just update local state
-        console.log('[CalendarView] Event completion not yet supported:', task);
-        return;
-      }
-
-      if (isGoalTask) {
+      // Both events linked to goals and regular goal tasks should update step status
+      if (isLinkedToGoal) {
         // Update goal step via API
         const backendStatus = newStatus === 'done' ? 'completed' : 'pending';
         console.log('[CalendarView] Updating step status:', task.stepId, backendStatus);
@@ -387,6 +396,10 @@ export const CalendarView = () => {
         // Reload events and tasks to reflect changes
         await loadGoals();
         await loadEvents();
+      } else if (isEvent) {
+        // Standalone event (not linked to a goal) - no completion tracking yet
+        console.log('[CalendarView] Standalone event completion not yet supported:', task);
+        return;
       }
     } catch (error) {
       console.error('[CalendarView] Failed to toggle task:', error);
