@@ -11,13 +11,10 @@ export const TopBar = () => {
   return (
     <header className={styles.topBar}>
       <div className={styles.brand}>
-        <span className={styles.logoMark} />
+        <img src="/logo.png" alt="maxOn" className={styles.logo} />
         <div className={styles.brandText}>
-          <Typography.Title variant="medium-strong">
-            maxOn
-          </Typography.Title>
           <Typography.Body variant="small" className={styles.sectionLabel}>
-            · {TAB_LABELS[activeTab]}
+            {TAB_LABELS[activeTab]}
           </Typography.Body>
         </div>
       </div>
