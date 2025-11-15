@@ -11,18 +11,34 @@
   gap: clamp(12px, 2vw, 16px);
 }
 
-.logo {
-  width: clamp(36px, 5vw, 44px);
-  height: clamp(36px, 5vw, 44px);
+.logoContainer {
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
+  overflow: hidden;
   transition: all var(--transition-base);
-  object-fit: cover;
   filter: drop-shadow(0 2px 8px rgba(99, 102, 241, 0.3));
+  flex-shrink: 0;
 }
 
-.logo:hover {
-  transform: scale(1.08);
+.logoContainer:hover {
+  transform: scale(1.05);
   filter: drop-shadow(0 4px 16px rgba(99, 102, 241, 0.5));
+}
+
+.logo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+@media (max-width: 768px) {
+  .logoContainer {
+    width: 50px;
+    height: 50px;
+  }
 }
 
 .brandText {
