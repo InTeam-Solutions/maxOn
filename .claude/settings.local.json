@@ -79,7 +79,11 @@
       "Bash(open \"https://railway.app/project/exciting-trust\")",
       "Bash(xargs -I {} curl -s \"https://mini-jcsl877vi-0stg0ts-projects.vercel.app/assets/{}\")",
       "Bash(find:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(railway up:*)",
+      "Bash(railway variables:*)",
+      "Bash(railway run:*)",
+      "Bash(PGPASSWORD=mYKIbBZmfIykZHKUuzCwcCrSJhJskpbJ psql:*)"
     ],
     "deny": [],
     "ask": []

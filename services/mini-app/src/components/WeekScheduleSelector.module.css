@@ -40,7 +40,6 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-height: 200px;
 }
 
 .dayCard:hover {
@@ -158,7 +157,7 @@
   }
 
   .dayCard {
-    min-height: 150px;
+    /* Adaptive height based on content */
   }
 }
 
@@ -174,7 +173,6 @@
 
   .dayCard {
     padding: 8px 4px;
-    min-height: 120px;
   }
 
   .dayHeader {

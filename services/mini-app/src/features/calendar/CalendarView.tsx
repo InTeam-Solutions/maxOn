@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import dayjs, { Dayjs } from 'dayjs';
 import { IconButton, Button, Typography } from '@maxhub/max-ui';
 import clsx from 'clsx';
@@ -31,12 +31,53 @@ export const CalendarView = () => {
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddEventModal, setShowAddEventModal] = useState(false);
+  const weekGridRef = useRef<HTMLDivElement>(null);
 
   // Load goals and events from API
   useEffect(() => {
     loadGoals();
     loadEvents();
   }, []);
+
+  // Auto-scroll to current day in week view
+  useEffect(() => {
+    if (viewMode === 'week' && weekGridRef.current) {
+      // Add delay to ensure DOM is fully rendered
+      setTimeout(() => {
+        if (!weekGridRef.current) return;
+
+        const today = dayjs();
+        const displayedWeekStart = dayjs(selectedDate).startOf('week');
+
+        // Calculate which column index is today (0 = Monday, 6 = Sunday)
+        const dayIndex = (today.day() + 6) % 7; // Convert Sunday=0 to Sunday=6
+
+        // Only scroll if we're viewing the current week
+        const isCurrentWeek = today.isSame(displayedWeekStart, 'week');
+
+        console.log('[CalendarView] Auto-scroll debug:', {
+          today: today.format('YYYY-MM-DD dddd'),
+          todayDayOfWeek: today.day(),
+          calculatedIndex: dayIndex,
+          displayedWeekStart: displayedWeekStart.format('YYYY-MM-DD'),
+          isCurrentWeek,
+          hasColumns: weekGridRef.current?.children.length,
+        });
+
+        if (isCurrentWeek && dayIndex >= 0 && dayIndex < 7) {
+          const dayColumns = weekGridRef.current.children;
+          console.log('[CalendarView] Scrolling to column', dayIndex, dayColumns[dayIndex]);
+          if (dayColumns[dayIndex]) {
+            dayColumns[dayIndex].scrollIntoView({
+              behavior: 'smooth',
+              block: 'nearest',
+              inline: 'center'
+            });
+          }
+        }
+      }, 300);
+    }
+  }, [viewMode, selectedDate]);
 
   const loadEvents = async () => {
     try {
@@ -332,7 +373,7 @@ export const CalendarView = () => {
               ›
             </IconButton>
           </div>
-          <div className={styles.weekGrid}>
+          <div className={styles.weekGrid} ref={weekGridRef}>
             {Array.from({ length: 7 }, (_, i) => {
               const day = dayjs(selectedDate).startOf('week').add(i, 'day');
               const dayKey = day.format('YYYY-MM-DD');
