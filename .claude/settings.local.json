@@ -83,7 +83,8 @@
       "Bash(railway up:*)",
       "Bash(railway variables:*)",
       "Bash(railway run:*)",
-      "Bash(PGPASSWORD=mYKIbBZmfIykZHKUuzCwcCrSJhJskpbJ psql:*)"
+      "Bash(PGPASSWORD=mYKIbBZmfIykZHKUuzCwcCrSJhJskpbJ psql:*)",
+      "Bash(jobs:*)"
     ],
     "deny": [],
     "ask": []

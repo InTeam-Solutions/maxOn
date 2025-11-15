@@ -223,8 +223,7 @@
 
 .dayEventCard {
   position: absolute;
-  left: 8px;
-  right: 8px;
+  /* left and width are set dynamically via inline styles for column layout */
   min-height: 50px;
   background: linear-gradient(135deg, var(--accent-primary), rgba(139, 92, 246, 0.8));
   border-radius: 8px;
@@ -232,6 +231,7 @@
   cursor: pointer;
   transition: all 0.2s ease;
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+  box-sizing: border-box;
 }
 
 .dayEventCard:hover {

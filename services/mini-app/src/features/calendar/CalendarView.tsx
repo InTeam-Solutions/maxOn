@@ -19,6 +19,106 @@ const generateMonthGrid = (month: Dayjs) => {
   return Array.from({ length: 42 }, (_, index) => gridStart.add(index, 'day'));
 };
 
+interface EventLayout {
+  task: Task;
+  top: number;
+  height: number;
+  column: number;
+  totalColumns: number;
+}
+
+/**
+ * Calculate layout for overlapping events
+ * Events that overlap in time are placed in adjacent columns
+ */
+const calculateEventLayout = (tasks: Task[]): EventLayout[] => {
+  if (tasks.length === 0) return [];
+
+  // Parse events with time bounds
+  const events = tasks.map(task => {
+    const taskDateTime = dayjs(task.dueDate);
+    const hours = taskDateTime.hour();
+    const minutes = taskDateTime.minute();
+    const startMinutes = hours * 60 + minutes;
+    // Default duration: 1 hour
+    const endMinutes = startMinutes + 60;
+
+    return {
+      task,
+      startMinutes,
+      endMinutes,
+      top: (startMinutes / 14.4), // Convert to percentage
+      height: 60 / 14.4 // 1 hour height in percentage
+    };
+  });
+
+  // Sort by start time, then by end time
+  events.sort((a, b) => a.startMinutes - b.startMinutes || a.endMinutes - b.endMinutes);
+
+  // Group overlapping events into columns
+  type EventWithBounds = { task: Task; startMinutes: number; endMinutes: number; top: number; height: number };
+  const columns: EventWithBounds[][] = [];
+  const eventLayouts: EventLayout[] = [];
+
+  events.forEach(event => {
+    // Find which column this event fits in
+    let placed = false;
+    for (let i = 0; i < columns.length; i++) {
+      const column = columns[i];
+      const lastInColumn = column[column.length - 1];
+
+      // Check if this event overlaps with the last event in this column
+      if (event.startMinutes >= lastInColumn.endMinutes) {
+        // No overlap, can place in this column
+        column.push(event);
+        placed = true;
+        break;
+      }
+    }
+
+    if (!placed) {
+      // Need a new column
+      columns.push([event]);
+    }
+  });
+
+  // Now assign column positions to each event
+  events.forEach(event => {
+    // Find which columns this event overlaps with
+    const overlappingColumns: number[] = [];
+    columns.forEach((column, colIndex) => {
+      const overlaps = column.some(e =>
+        !(e.endMinutes <= event.startMinutes || e.startMinutes >= event.endMinutes)
+      );
+      if (overlaps) {
+        overlappingColumns.push(colIndex);
+      }
+    });
+
+    // Find which column this event is actually in
+    let myColumn = 0;
+    for (let i = 0; i < columns.length; i++) {
+      if (columns[i].includes(event)) {
+        myColumn = i;
+        break;
+      }
+    }
+
+    const totalColumns = overlappingColumns.length;
+    const columnIndex = overlappingColumns.indexOf(myColumn);
+
+    eventLayouts.push({
+      task: event.task,
+      top: event.top,
+      height: event.height,
+      column: columnIndex,
+      totalColumns: totalColumns
+    });
+  });
+
+  return eventLayouts;
+};
+
 type ViewMode = 'day' | 'week' | 'month';
 
 export const CalendarView = () => {
@@ -324,26 +424,35 @@ export const CalendarView = () => {
                     style={{ top: `${(dayjs().hour() * 60 + dayjs().minute()) / 14.4}%` }}
                   />
                 )}
-                {/* Day's events positioned on timeline */}
-                {agendaTasks.map((task) => {
-                  const taskDateTime = dayjs(task.dueDate);
-                  const taskTime = taskDateTime.format('HH:mm');
-                  const hours = taskDateTime.hour();
-                  const minutes = taskDateTime.minute();
-                  const topPosition = ((hours * 60 + minutes) / 14.4);
+                {/* Day's events positioned on timeline with column layout for overlaps */}
+                {(() => {
+                  const eventLayouts = calculateEventLayout(agendaTasks);
+                  return eventLayouts.map(({ task, top, height, column, totalColumns }) => {
+                    const taskDateTime = dayjs(task.dueDate);
+                    const taskTime = taskDateTime.format('HH:mm');
 
-                  return (
-                    <div
-                      key={task.id}
-                      className={styles.dayEventCard}
-                      style={{ top: `${topPosition}%` }}
-                      onClick={() => handleTaskAction(task, 'goal')}
-                    >
-                      <div className={styles.dayEventTime}>{taskTime}</div>
-                      <div className={styles.dayEventTitle}>{task.title}</div>
-                    </div>
-                  );
-                })}
+                    // Calculate width and left position based on columns
+                    const widthPercent = totalColumns > 1 ? (100 / totalColumns) : 100;
+                    const leftPercent = totalColumns > 1 ? (column * widthPercent) : 0;
+
+                    return (
+                      <div
+                        key={task.id}
+                        className={styles.dayEventCard}
+                        style={{
+                          top: `${top}%`,
+                          height: `${height}%`,
+                          left: `${leftPercent}%`,
+                          width: `${widthPercent}%`
+                        }}
+                        onClick={() => handleTaskAction(task, 'goal')}
+                      >
+                        <div className={styles.dayEventTime}>{taskTime}</div>
+                        <div className={styles.dayEventTitle}>{task.title}</div>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </div>
           </div>
