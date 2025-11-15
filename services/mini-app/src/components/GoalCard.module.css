@@ -82,6 +82,11 @@
   z-index: 1;
 }
 
+.progressRow > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
 .progressRow > span {
   min-width: 45px;
   text-align: right;
