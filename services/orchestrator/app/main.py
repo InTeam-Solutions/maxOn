@@ -201,37 +201,102 @@ async def execute_intent(intent: str, params: Dict[str, Any], user_id: str) -> D
         endpoint = "/api/events"
         action = intent.split(".")[1]  # search, create, update, delete, mutate
 
-        # Adapter: event.mutate_batch → multiple event.create
+        # Adapter: event.mutate_batch → multiple event.create with step linking
         if action == "mutate_batch":
             events = params.get("events", [])
             if not events:
                 return {"success": False, "error": "No events provided"}
 
+            # Get all user's goals and steps to match against
+            goals_response = http_client.get(f"{CORE_SERVICE_URL}/api/goals", params={"user_id": user_id})
+            all_goals = goals_response.json()
+
             created_events = []
+            linked_steps = []
             errors = []
 
             for event_data in events:
                 try:
-                    create_params = {
-                        "title": event_data.get("title"),
-                        "date": event_data.get("date"),
-                        "time": event_data.get("time"),
-                        "notes": event_data.get("notes"),
-                    }
-                    # Remove None values
-                    create_params = {k: v for k, v in create_params.items() if v is not None}
-                    response = http_client.post(f"{CORE_SERVICE_URL}{endpoint}", json={**create_params, "user_id": user_id})
-                    created_events.append(response.json())
+                    event_title = event_data.get("title", "").lower()
+                    event_date = event_data.get("date")
+                    event_time = event_data.get("time")
+
+                    # Try to match with existing step by title similarity
+                    matched_step = None
+                    for goal in all_goals:
+                        for step in goal.get("steps", []):
+                            step_title_lower = step.get("title", "").lower()
+                            # Check if titles are similar (contains or 80%+ match)
+                            if (event_title in step_title_lower or
+                                step_title_lower in event_title or
+                                _calculate_similarity(event_title, step_title_lower) > 0.8):
+                                matched_step = step
+                                break
+                        if matched_step:
+                            break
+
+                    if matched_step and event_time:
+                        # Link step to new event
+                        create_params = {
+                            "title": event_data.get("title"),
+                            "date": event_date,
+                            "time": event_time,
+                            "notes": event_data.get("notes"),
+                            "event_type": "goal_step",
+                            "linked_step_id": matched_step["id"],
+                            "linked_goal_id": matched_step["goal_id"],
+                        }
+                        create_params = {k: v for k, v in create_params.items() if v is not None}
+                        response = http_client.post(f"{CORE_SERVICE_URL}{endpoint}", json={**create_params, "user_id": user_id})
+                        event_result = response.json()
+
+                        # Update step with scheduling info
+                        http_client.put(
+                            f"{CORE_SERVICE_URL}/api/goals/{matched_step['goal_id']}/steps/{matched_step['id']}",
+                            params={"user_id": user_id},
+                            json={
+                                "planned_date": event_date,
+                                "planned_time": event_time,
+                                "linked_event_id": event_result["id"]
+                            }
+                        )
+
+                        linked_steps.append({"step_id": matched_step["id"], "event_id": event_result["id"]})
+                        created_events.append(event_result)
+                    else:
+                        # Create regular event
+                        create_params = {
+                            "title": event_data.get("title"),
+                            "date": event_date,
+                            "time": event_time,
+                            "notes": event_data.get("notes"),
+                        }
+                        create_params = {k: v for k, v in create_params.items() if v is not None}
+                        response = http_client.post(f"{CORE_SERVICE_URL}{endpoint}", json={**create_params, "user_id": user_id})
+                        created_events.append(response.json())
+
                 except Exception as e:
                     errors.append({"event": event_data, "error": str(e)})
 
             return {
                 "success": len(created_events) > 0,
                 "created": created_events,
+                "linked_steps": linked_steps,
                 "errors": errors,
                 "total": len(events),
-                "created_count": len(created_events)
+                "created_count": len(created_events),
+                "linked_count": len(linked_steps)
             }
+
+def _calculate_similarity(s1: str, s2: str) -> float:
+    """Simple similarity check using set intersection"""
+    words1 = set(s1.split())
+    words2 = set(s2.split())
+    if not words1 or not words2:
+        return 0.0
+    intersection = words1 & words2
+    union = words1 | words2
+    return len(intersection) / len(union) if union else 0.0
 
         # Adapter: event.mutate → event.create/update/delete
         if action == "mutate":
