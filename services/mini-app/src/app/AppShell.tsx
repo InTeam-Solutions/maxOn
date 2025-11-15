@@ -5,7 +5,7 @@ import { useMediaQuery } from '../hooks/useMediaQuery';
 import { TodayView } from '../features/today/TodayView';
 import { CalendarView } from '../features/calendar/CalendarView';
 import { GoalsView } from '../features/goals/GoalsView';
-import { LeaderboardView } from '../features/leaderboard/LeaderboardView';
+import { StatisticsView } from '../features/statistics/StatisticsView';
 import { ChatPanel } from '../features/chat/ChatPanel';
 import { TopBar } from '../components/TopBar';
 import { TabStrip } from '../components/TabStrip';
@@ -15,7 +15,7 @@ const TAB_COMPONENTS = {
   today: TodayView,
   calendar: CalendarView,
   goals: GoalsView,
-  leaderboard: LeaderboardView
+  leaderboard: StatisticsView
 } as const;
 
 export const AppShell = () => {
