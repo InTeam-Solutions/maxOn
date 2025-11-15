@@ -193,6 +193,17 @@ def apply_fallback_intent_detection(message: str) -> Dict[str, Any]:
     }
 
 
+def _calculate_similarity(s1: str, s2: str) -> float:
+    """Simple similarity check using set intersection"""
+    words1 = set(s1.split())
+    words2 = set(s2.split())
+    if not words1 or not words2:
+        return 0.0
+    intersection = words1 & words2
+    union = words1 | words2
+    return len(intersection) / len(union) if union else 0.0
+
+
 async def execute_intent(intent: str, params: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     """Execute intent via Core Service"""
 
@@ -287,16 +298,6 @@ async def execute_intent(intent: str, params: Dict[str, Any], user_id: str) -> D
                 "created_count": len(created_events),
                 "linked_count": len(linked_steps)
             }
-
-def _calculate_similarity(s1: str, s2: str) -> float:
-    """Simple similarity check using set intersection"""
-    words1 = set(s1.split())
-    words2 = set(s2.split())
-    if not words1 or not words2:
-        return 0.0
-    intersection = words1 & words2
-    union = words1 | words2
-    return len(intersection) / len(union) if union else 0.0
 
         # Adapter: event.mutate → event.create/update/delete
         if action == "mutate":
