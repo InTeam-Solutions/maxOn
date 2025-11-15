@@ -30,6 +30,9 @@ export interface Task {
   dueDate: string;
   status: TaskStatus;
   focusArea: string;
+  isEvent?: boolean; // True if this is a standalone event (not a goal step)
+  eventData?: any; // Original event data if isEvent=true
+  stepId?: string; // ID of the related goal step if this is a goal task
 }
 
 export interface LeaderboardEntry {

@@ -3,6 +3,7 @@ import dayjs, { Dayjs } from 'dayjs';
 import { IconButton, Button, Typography } from '@maxhub/max-ui';
 import clsx from 'clsx';
 import { AddEventModal } from '../../components/AddEventModal';
+import { TaskCheckbox } from '../../components/TaskCheckbox';
 import { useAppState } from '../../store/AppStateContext';
 import { useChat } from '../../store/ChatContext';
 import { apiClient } from '../../services/api';
@@ -338,6 +339,61 @@ export const CalendarView = () => {
     }
   };
 
+  // Handle checkbox toggle for tasks/events
+  const handleToggleTask = async (task: Task, newStatus: 'done' | 'scheduled') => {
+    const isEvent = task.isEvent;
+    const isGoalTask = !isEvent && task.stepId && task.goalId;
+
+    try {
+      if (isEvent) {
+        // For standalone events, we don't have completion tracking yet
+        // Just update local state
+        console.log('[CalendarView] Event completion not yet supported:', task);
+        return;
+      }
+
+      if (isGoalTask) {
+        // Update goal step via API
+        const backendStatus = newStatus === 'done' ? 'completed' : 'pending';
+        console.log('[CalendarView] Updating step status:', task.stepId, backendStatus);
+
+        await apiClient.updateStep(task.stepId!, { status: backendStatus });
+        console.log('[CalendarView] Step status updated successfully');
+
+        // Update local goals state to reflect the change
+        setGoals((prevGoals) =>
+          prevGoals.map(goal => {
+            if (goal.id !== task.goalId) return goal;
+
+            const updatedSteps = goal.steps?.map(step =>
+              step.id === task.stepId
+                ? { ...step, status: backendStatus, completed: backendStatus === 'completed' }
+                : step
+            );
+
+            // Recalculate progress
+            const completedSteps = updatedSteps.filter(s => s.completed).length;
+            const totalSteps = updatedSteps.length;
+            const newProgress = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+
+            return {
+              ...goal,
+              steps: updatedSteps,
+              progress: newProgress
+            };
+          })
+        );
+
+        // Reload events and tasks to reflect changes
+        await loadGoals();
+        await loadEvents();
+      }
+    } catch (error) {
+      console.error('[CalendarView] Failed to toggle task:', error);
+      alert('Не удалось обновить задачу');
+    }
+  };
+
   // Show loading state until data is loaded
   if (loading) {
     return (
@@ -447,7 +503,10 @@ export const CalendarView = () => {
                         }}
                         onClick={() => handleTaskAction(task, 'goal')}
                       >
-                        <div className={styles.dayEventTime}>{taskTime}</div>
+                        <div className={styles.dayEventHeader}>
+                          <TaskCheckbox task={task} onToggle={handleToggleTask} />
+                          <div className={styles.dayEventTime}>{taskTime}</div>
+                        </div>
                         <div className={styles.dayEventTitle}>{task.title}</div>
                       </div>
                     );
@@ -520,8 +579,11 @@ export const CalendarView = () => {
                             handleTaskAction(task, 'goal');
                           }}
                         >
-                          <div className={styles.weekEventTime}>
-                            {dayjs(task.dueDate).format('HH:mm')}
+                          <div className={styles.weekEventHeader}>
+                            <TaskCheckbox task={task} onToggle={handleToggleTask} />
+                            <div className={styles.weekEventTime}>
+                              {dayjs(task.dueDate).format('HH:mm')}
+                            </div>
                           </div>
                           <div className={styles.weekEventTitle}>
                             {task.title.length > 30 ? `${task.title.slice(0, 30)}...` : task.title}
@@ -622,21 +684,16 @@ export const CalendarView = () => {
           )}
           {agendaTasks.map((task) => (
             <div key={task.id} className={styles.agendaItem}>
-              <div>
+              <div className={styles.agendaCheckboxContainer}>
+                <TaskCheckbox task={task} onToggle={handleToggleTask} />
+              </div>
+              <div className={styles.agendaContent}>
                 <Typography.Title variant="small-strong">{task.title}</Typography.Title>
                 <Typography.Body variant="small" className={styles.agendaMeta}>
                   Цель: {task.goalTitle}
                 </Typography.Body>
               </div>
               <div className={styles.agendaActions}>
-                <Button
-                  size="small"
-                  mode="secondary"
-                  appearance={completedTasks[task.id] ? 'neutral-themed' : 'themed'}
-                  onClick={() => handleTaskAction(task, 'complete')}
-                >
-                  {completedTasks[task.id] ? 'Вернуть' : 'Готово'}
-                </Button>
                 <IconButton
                   size="small"
                   mode="tertiary"

@@ -239,11 +239,17 @@
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.5);
 }
 
+.dayEventHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
 .dayEventTime {
   font-size: 12px;
   font-weight: 700;
   color: rgba(255, 255, 255, 0.9);
-  margin-bottom: 4px;
 }
 
 .dayEventTitle {
@@ -360,11 +366,17 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+.weekEventHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
 .weekEventTime {
   font-size: 11px;
   color: var(--text-secondary);
   font-weight: 600;
-  margin-bottom: 4px;
 }
 
 .weekEventTitle {
@@ -399,6 +411,17 @@
   gap: 12px;
 }
 
+.agendaCheckboxContainer {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.agendaContent {
+  flex: 1;
+  min-width: 0;
+}
+
 .agendaMeta {
   color: var(--text-secondary);
 }
@@ -407,6 +430,7 @@
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .emptyState {

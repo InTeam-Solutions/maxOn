@@ -38,6 +38,8 @@ export function stepToTask(
     dueDate,
     status: statusMap[step.status] || 'scheduled',
     focusArea: goal.category || 'Общее',
+    stepId: String(step.id),
+    isEvent: false,
     hasNoTime: !step.planned_date  // Flag to show "без времени"
   } as any;
 }
