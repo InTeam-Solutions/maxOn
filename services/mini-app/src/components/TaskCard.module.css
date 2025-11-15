@@ -60,6 +60,21 @@
   color: var(--accent-violet);
 }
 
+.badge.deadline {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.deadlineCard {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.deadlineCard:hover {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
 .goal {
   color: var(--text-secondary);
 }
