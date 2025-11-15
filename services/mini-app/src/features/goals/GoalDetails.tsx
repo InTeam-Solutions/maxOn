@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import { Button, Typography, IconButton } from '@maxhub/max-ui';
-import type { Goal, GoalStep } from '../../types/domain';
+import type { Goal, GoalStep, Task } from '../../types/domain';
 import { ProgressBar } from '../../components/ProgressBar';
 import { useChat } from '../../store/ChatContext';
 import { useAppState } from '../../store/AppStateContext';
 import { apiClient } from '../../services/api';
 import { AddStepModal } from '../../components/AddStepModal';
+import { TaskCheckbox } from '../../components/TaskCheckbox';
 import styles from './GoalDetails.module.css';
 
 interface GoalDetailsProps {
@@ -26,29 +27,28 @@ export const GoalDetails = ({ goal, onGoalUpdated, onGoalDeleted }: GoalDetailsP
     setSteps(goal.steps);
   }, [goal.id]); // Only reset steps when goal ID changes, not on every goal update
 
-  const toggleStep = async (step: GoalStep) => {
-    const newStatus = step.completed ? 'pending' : 'completed';
+  const handleToggleStep = async (task: Task, newStatus: 'done' | 'scheduled') => {
+    const stepId = task.stepId!;
+    const backendStatus = newStatus === 'done' ? 'completed' : 'pending';
 
     // Optimistically update UI immediately
     setSteps((prev) =>
       prev.map((s) =>
-        s.id === step.id ? { ...s, completed: newStatus === 'completed', status: newStatus } : s
+        s.id === stepId ? { ...s, completed: backendStatus === 'completed', status: backendStatus } : s
       )
     );
 
     try {
-      console.log('[GoalDetails] Toggling step:', step.id, 'from', step.status, 'to', newStatus);
+      console.log('[GoalDetails] Toggling step:', stepId, 'to', backendStatus);
       // Update in API
-      const response = await apiClient.updateStep(step.id, { status: newStatus });
-      console.log('[GoalDetails] Step updated successfully, response:', response);
-      console.log('[GoalDetails] Response status field:', response.status);
+      await apiClient.updateStep(stepId, { status: backendStatus });
+      console.log('[GoalDetails] Step updated successfully');
 
-      // Refresh parent to update goal progress - but do it after a delay
-      // to give backend time to process the update
+      // Refresh parent to update goal progress
       setTimeout(() => {
         console.log('[GoalDetails] Calling onGoalUpdated to refresh progress');
         onGoalUpdated?.();
-      }, 500);
+      }, 300);
     } catch (err) {
       console.error('[GoalDetails] Failed to toggle step:', err);
       alert('Не удалось обновить шаг');
@@ -56,7 +56,7 @@ export const GoalDetails = ({ goal, onGoalUpdated, onGoalDeleted }: GoalDetailsP
       // Revert optimistic update on error
       setSteps((prev) =>
         prev.map((s) =>
-          s.id === step.id ? { ...s, completed: step.completed, status: step.status } : s
+          s.id === stepId ? { ...s, completed: !backendStatus, status: backendStatus === 'completed' ? 'pending' : 'completed' } : s
         )
       );
     }
@@ -141,40 +141,56 @@ export const GoalDetails = ({ goal, onGoalUpdated, onGoalDeleted }: GoalDetailsP
           </Button>
         </div>
         <div className={styles.stepsList}>
-          {steps.map((step) => (
-            <div key={step.id} className={styles.stepRow}>
-              <button
-                type="button"
-                className={`${styles.stepButton} ${step.completed ? styles.completed : ''}`}
-                onClick={() => toggleStep(step)}
-                disabled={deletingStepId === step.id}
-              >
-                <span className={styles.checkbox} aria-hidden />
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
-                  <span>{step.title}</span>
-                  {(step as any).planned_date && (
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      📅 {dayjs((step as any).planned_date).format('DD.MM.YYYY')}
-                      {(step as any).planned_time && ` в ${(step as any).planned_time}`}
+          {steps.map((step) => {
+            // Convert step to Task format for TaskCheckbox
+            const stepTask: Task = {
+              id: `step-${step.id}`,
+              title: step.title,
+              goalId: goal.id,
+              goalTitle: goal.title,
+              dueDate: (step as any).planned_date
+                ? dayjs(`${(step as any).planned_date}T${(step as any).planned_time || '00:00:00'}`).toISOString()
+                : dayjs().toISOString(),
+              status: step.completed ? 'done' : 'scheduled',
+              focusArea: goal.category,
+              stepId: step.id,
+              isEvent: false
+            };
+
+            return (
+              <div key={step.id} className={styles.stepRow}>
+                <div className={styles.stepContent}>
+                  <TaskCheckbox
+                    task={stepTask}
+                    onToggle={handleToggleStep}
+                    disabled={deletingStepId === step.id}
+                  />
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px', flex: 1 }}>
+                    <span>{step.title}</span>
+                    {(step as any).planned_date && (
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        📅 {dayjs((step as any).planned_date).format('DD.MM.YYYY')}
+                        {(step as any).planned_time && ` в ${(step as any).planned_time}`}
+                      </span>
+                    )}
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      ID: {step.id} • Статус: {(step as any).status || 'pending'}
                     </span>
-                  )}
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    ID: {step.id} • Статус: {(step as any).status || 'pending'}
-                  </span>
+                  </div>
                 </div>
-              </button>
-              <IconButton
-                size="small"
-                mode="tertiary"
-                appearance="neutral"
-                aria-label="Удалить шаг"
-                onClick={() => handleDeleteStep(step.id)}
-                disabled={deletingStepId === step.id}
-              >
-                🗑️
-              </IconButton>
-            </div>
-          ))}
+                <IconButton
+                  size="small"
+                  mode="tertiary"
+                  appearance="neutral"
+                  aria-label="Удалить шаг"
+                  onClick={() => handleDeleteStep(step.id)}
+                  disabled={deletingStepId === step.id}
+                >
+                  🗑️
+                </IconButton>
+              </div>
+            );
+          })}
         </div>
       </div>
 

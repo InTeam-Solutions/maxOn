@@ -359,6 +359,15 @@ export const CalendarView = () => {
     const isEvent = task.isEvent;
     const isLinkedToGoal = task.stepId && task.goalId;
 
+    console.log('[CalendarView] handleToggleTask called:', {
+      taskId: task.id,
+      stepId: task.stepId,
+      goalId: task.goalId,
+      newStatus,
+      isEvent,
+      isLinkedToGoal
+    });
+
     try {
       // Both events linked to goals and regular goal tasks should update step status
       if (isLinkedToGoal) {
@@ -369,7 +378,7 @@ export const CalendarView = () => {
         await apiClient.updateStep(task.stepId!, { status: backendStatus });
         console.log('[CalendarView] Step status updated successfully');
 
-        // Update local goals state to reflect the change
+        // Update local goals state to reflect the change immediately
         setGoals((prevGoals) =>
           prevGoals.map(goal => {
             if (goal.id !== task.goalId) return goal;
@@ -378,12 +387,19 @@ export const CalendarView = () => {
               step.id === task.stepId
                 ? { ...step, status: backendStatus, completed: backendStatus === 'completed' }
                 : step
-            );
+            ) || [];
 
             // Recalculate progress
             const completedSteps = updatedSteps.filter(s => s.completed).length;
             const totalSteps = updatedSteps.length;
             const newProgress = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+
+            console.log('[CalendarView] Updated goal progress:', {
+              goalId: goal.id,
+              completedSteps,
+              totalSteps,
+              newProgress
+            });
 
             return {
               ...goal,
@@ -393,9 +409,7 @@ export const CalendarView = () => {
           })
         );
 
-        // Reload events and tasks to reflect changes
-        await loadGoals();
-        await loadEvents();
+        // No need to reload - UI updates via state
       } else if (isEvent) {
         // Standalone event (not linked to a goal) - no completion tracking yet
         console.log('[CalendarView] Standalone event completion not yet supported:', task);
@@ -517,7 +531,6 @@ export const CalendarView = () => {
                         onClick={() => handleTaskAction(task, 'goal')}
                       >
                         <div className={styles.dayEventHeader}>
-                          <TaskCheckbox task={task} onToggle={handleToggleTask} />
                           <div className={styles.dayEventTime}>{taskTime}</div>
                         </div>
                         <div className={styles.dayEventTitle}>{task.title}</div>
@@ -593,7 +606,6 @@ export const CalendarView = () => {
                           }}
                         >
                           <div className={styles.weekEventHeader}>
-                            <TaskCheckbox task={task} onToggle={handleToggleTask} />
                             <div className={styles.weekEventTime}>
                               {dayjs(task.dueDate).format('HH:mm')}
                             </div>
