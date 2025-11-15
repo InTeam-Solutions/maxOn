@@ -853,3 +853,95 @@ async def get_all_users_with_notifications():
     except Exception as e:
         logger.error(f"Error getting users: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Statistics & Leaderboard ====================
+
+
+@app.get("/api/leaderboard")
+async def get_leaderboard(limit: int = 20):
+    """
+    Get leaderboard of users ranked by streak days (consecutive days with completed tasks).
+    Returns anonymous user IDs formatted as 'User #{rank}'.
+    """
+    try:
+        db = get_db()
+        with db.session_ctx() as session:
+            # Import models
+            from app.models.goal import Goal, Step
+            from sqlalchemy import func, distinct
+            from datetime import datetime, timedelta
+
+            # Get all users with their completed steps
+            # Calculate streak days: consecutive days with at least 1 completed step
+            user_stats = []
+
+            # Get all users who have goals
+            users_with_goals = session.query(distinct(Goal.user_id)).all()
+
+            for (user_id,) in users_with_goals:
+                # Get all completed steps for this user, ordered by planned_date
+                completed_steps = (
+                    session.query(Step)
+                    .join(Goal, Goal.id == Step.goal_id)
+                    .filter(
+                        Goal.user_id == user_id,
+                        Step.status == 'completed',
+                        Step.planned_date.isnot(None)
+                    )
+                    .order_by(Step.planned_date.desc())
+                    .all()
+                )
+
+                if not completed_steps:
+                    continue
+
+                # Calculate streak: count consecutive days from today backwards
+                streak_days = 0
+                today = datetime.now().date()
+
+                # Get unique dates of completed tasks
+                completed_dates = sorted(
+                    set(step.planned_date for step in completed_steps if step.planned_date),
+                    reverse=True
+                )
+
+                # Calculate streak from most recent date
+                if completed_dates:
+                    current_date = completed_dates[0]
+
+                    # Only count if streak includes today or yesterday
+                    if (today - current_date).days <= 1:
+                        streak_days = 1
+
+                        for i in range(1, len(completed_dates)):
+                            days_diff = (completed_dates[i-1] - completed_dates[i]).days
+                            if days_diff == 1:
+                                streak_days += 1
+                            else:
+                                break
+
+                if streak_days > 0:
+                    user_stats.append({
+                        'user_id': user_id,
+                        'streak_days': streak_days
+                    })
+
+            # Sort by streak_days descending
+            user_stats.sort(key=lambda x: x['streak_days'], reverse=True)
+
+            # Limit results and add rank with anonymous display names
+            leaderboard = []
+            for rank, user_stat in enumerate(user_stats[:limit], start=1):
+                leaderboard.append({
+                    'userId': user_stat['user_id'],
+                    'displayName': f'User #{rank}',
+                    'streakDays': user_stat['streak_days'],
+                    'rank': rank
+                })
+
+            return leaderboard
+
+    except Exception as e:
+        logger.error(f"Error getting leaderboard: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

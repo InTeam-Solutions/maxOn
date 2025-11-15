@@ -242,6 +242,20 @@ class ApiClient {
       timezone: 'Europe/Moscow',
     };
   }
+
+  // ==================== Statistics & Leaderboard ====================
+
+  async getStatistics(): Promise<any> {
+    return this.request<any>(
+      `${this.coreUrl}/api/statistics?user_id=${this.userId}`
+    );
+  }
+
+  async getLeaderboard(limit: number = 20): Promise<any[]> {
+    return this.request<any[]>(
+      `${this.coreUrl}/api/leaderboard?limit=${limit}`
+    );
+  }
 }
 
 export const apiClient = new ApiClient();

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Typography, Button } from '@maxhub/max-ui';
-import { LineChart, Line, PieChart, Pie, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import dayjs from 'dayjs';
 import { apiClient } from '../../services/api';
 import type { Goal } from '../../types/domain';
@@ -33,6 +33,7 @@ export const StatisticsView = () => {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [useMockData, setUseMockData] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -64,19 +65,15 @@ export const StatisticsView = () => {
       }));
       setGoals(transformedGoals);
 
-      // TODO: Replace with real API call when backend is ready
-      // const stats = await apiClient.getStatistics();
-      // const leaderboardData = await apiClient.getLeaderboard();
-      // setLeaderboard(leaderboardData);
-
-      // Mock leaderboard for now
-      setLeaderboard([
-        { userId: '1', displayName: 'User #1', streakDays: 45, rank: 1 },
-        { userId: '2', displayName: 'User #2', streakDays: 38, rank: 2 },
-        { userId: '3', displayName: 'User #3', streakDays: 32, rank: 3 },
-        { userId: '4', displayName: 'User #4', streakDays: 28, rank: 4 },
-        { userId: '5', displayName: 'User #5', streakDays: 25, rank: 5 },
-      ]);
+      // Load leaderboard from backend
+      try {
+        const leaderboardData = await apiClient.getLeaderboard(20);
+        setLeaderboard(leaderboardData);
+      } catch (err) {
+        console.error('[StatisticsView] Failed to load leaderboard, using fallback:', err);
+        // Fallback to empty leaderboard if API fails
+        setLeaderboard([]);
+      }
     } catch (err) {
       console.error('[StatisticsView] Failed to load data:', err);
     } finally {
@@ -84,14 +81,131 @@ export const StatisticsView = () => {
     }
   };
 
+  // Generate mock data for demo purposes
+  const generateMockData = (): { goals: Goal[], leaderboard: LeaderboardEntry[] } => {
+    const today = dayjs();
+
+    // Create mock goals with completed steps spread over time
+    const mockGoals: Goal[] = [
+      {
+        id: 'mock-1',
+        title: 'Изучить React',
+        description: 'Полный курс React с hooks',
+        targetDate: today.add(30, 'day').toISOString(),
+        progress: 75,
+        category: 'Обучение',
+        priority: 'high',
+        status: 'active',
+        steps: [
+          { id: 's1', title: 'Основы React', completed: true, status: 'completed', planned_date: today.subtract(6, 'day').format('YYYY-MM-DD'), planned_time: '10:00' },
+          { id: 's2', title: 'Hooks', completed: true, status: 'completed', planned_date: today.subtract(5, 'day').format('YYYY-MM-DD'), planned_time: '11:00' },
+          { id: 's3', title: 'Context API', completed: true, status: 'completed', planned_date: today.subtract(4, 'day').format('YYYY-MM-DD'), planned_time: '12:00' },
+          { id: 's4', title: 'Redux', completed: false, status: 'pending', planned_date: today.add(1, 'day').format('YYYY-MM-DD'), planned_time: '10:00' }
+        ]
+      },
+      {
+        id: 'mock-2',
+        title: 'Фитнес программа',
+        description: 'Тренировки 5 раз в неделю',
+        targetDate: today.add(60, 'day').toISOString(),
+        progress: 60,
+        category: 'Здоровье',
+        priority: 'medium',
+        status: 'active',
+        steps: [
+          { id: 's5', title: 'Тренировка 1', completed: true, status: 'completed', planned_date: today.subtract(3, 'day').format('YYYY-MM-DD'), planned_time: '07:00' },
+          { id: 's6', title: 'Тренировка 2', completed: true, status: 'completed', planned_date: today.subtract(2, 'day').format('YYYY-MM-DD'), planned_time: '07:00' },
+          { id: 's7', title: 'Тренировка 3', completed: true, status: 'completed', planned_date: today.subtract(1, 'day').format('YYYY-MM-DD'), planned_time: '07:00' },
+          { id: 's8', title: 'Тренировка 4', completed: true, status: 'completed', planned_date: today.format('YYYY-MM-DD'), planned_time: '07:00' }
+        ]
+      },
+      {
+        id: 'mock-3',
+        title: 'Написать книгу',
+        description: 'Роман на 200 страниц',
+        targetDate: today.add(90, 'day').toISOString(),
+        progress: 40,
+        category: 'Творчество',
+        priority: 'medium',
+        status: 'active',
+        steps: [
+          { id: 's9', title: 'Глава 1', completed: true, status: 'completed', planned_date: today.subtract(20, 'day').format('YYYY-MM-DD'), planned_time: '19:00' },
+          { id: 's10', title: 'Глава 2', completed: true, status: 'completed', planned_date: today.subtract(15, 'day').format('YYYY-MM-DD'), planned_time: '19:00' },
+          { id: 's11', title: 'Глава 3', completed: false, status: 'pending', planned_date: today.add(5, 'day').format('YYYY-MM-DD'), planned_time: '19:00' }
+        ]
+      },
+      {
+        id: 'mock-4',
+        title: 'Запустить стартап',
+        description: 'SaaS продукт для малого бизнеса',
+        targetDate: today.add(120, 'day').toISOString(),
+        progress: 85,
+        category: 'Карьера',
+        priority: 'high',
+        status: 'active',
+        steps: [
+          { id: 's12', title: 'Исследование рынка', completed: true, status: 'completed', planned_date: today.subtract(25, 'day').format('YYYY-MM-DD'), planned_time: '14:00' },
+          { id: 's13', title: 'MVP', completed: true, status: 'completed', planned_date: today.subtract(10, 'day').format('YYYY-MM-DD'), planned_time: '14:00' },
+          { id: 's14', title: 'Первые клиенты', completed: true, status: 'completed', planned_date: today.subtract(5, 'day').format('YYYY-MM-DD'), planned_time: '14:00' }
+        ]
+      },
+      {
+        id: 'mock-5',
+        title: 'Выучить испанский',
+        description: 'Уровень B2',
+        targetDate: today.add(180, 'day').toISOString(),
+        progress: 30,
+        category: 'Обучение',
+        priority: 'low',
+        status: 'active',
+        steps: [
+          { id: 's15', title: 'Базовая грамматика', completed: true, status: 'completed', planned_date: today.subtract(30, 'day').format('YYYY-MM-DD'), planned_time: '20:00' },
+          { id: 's16', title: '500 слов', completed: true, status: 'completed', planned_date: today.subtract(20, 'day').format('YYYY-MM-DD'), planned_time: '20:00' }
+        ]
+      },
+      {
+        id: 'mock-6',
+        title: 'Марафон',
+        description: 'Пробежать 42км',
+        targetDate: today.subtract(10, 'day').toISOString(),
+        progress: 100,
+        category: 'Здоровье',
+        priority: 'high',
+        status: 'completed',
+        steps: [
+          { id: 's17', title: 'Тренировки', completed: true, status: 'completed', planned_date: today.subtract(60, 'day').format('YYYY-MM-DD'), planned_time: '06:00' },
+          { id: 's18', title: 'Полумарафон', completed: true, status: 'completed', planned_date: today.subtract(30, 'day').format('YYYY-MM-DD'), planned_time: '06:00' },
+          { id: 's19', title: 'Марафон', completed: true, status: 'completed', planned_date: today.subtract(10, 'day').format('YYYY-MM-DD'), planned_time: '06:00' }
+        ]
+      }
+    ];
+
+    const mockLeaderboard: LeaderboardEntry[] = [
+      { userId: 'user1', displayName: 'User #1', streakDays: 42, rank: 1 },
+      { userId: 'user2', displayName: 'User #2', streakDays: 38, rank: 2 },
+      { userId: 'user3', displayName: 'User #3', streakDays: 31, rank: 3 },
+      { userId: 'user4', displayName: 'User #4', streakDays: 28, rank: 4 },
+      { userId: 'user5', displayName: 'User #5', streakDays: 25, rank: 5 },
+      { userId: 'user6', displayName: 'User #6', streakDays: 21, rank: 6 },
+      { userId: 'user7', displayName: 'User #7', streakDays: 18, rank: 7 },
+      { userId: 'user8', displayName: 'User #8', streakDays: 15, rank: 8 },
+      { userId: 'user9', displayName: 'User #9', streakDays: 12, rank: 9 },
+      { userId: 'user10', displayName: 'User #10', streakDays: 10, rank: 10 },
+    ];
+
+    return { goals: mockGoals, leaderboard: mockLeaderboard };
+  };
+
   // Calculate statistics from goals data
   const statistics: StatisticsData = useMemo(() => {
-    const totalGoals = goals.length;
-    const completedGoals = goals.filter(g => g.status === 'completed').length;
-    const activeGoals = goals.filter(g => g.status === 'active').length;
+    const dataToUse = useMockData ? generateMockData().goals : goals;
+
+    const totalGoals = dataToUse.length;
+    const completedGoals = dataToUse.filter(g => g.status === 'completed').length;
+    const activeGoals = dataToUse.filter(g => g.status === 'active').length;
 
     // Calculate streak (simplified - count days with activity in last 30 days)
-    const allTasks = extractTasksFromGoals(goals);
+    const allTasks = extractTasksFromGoals(dataToUse);
     const today = dayjs();
     let streakDays = 0;
     for (let i = 0; i < 30; i++) {
@@ -170,7 +284,10 @@ export const StatisticsView = () => {
       activityHeatmap,
       weekdayStats
     };
-  }, [goals, timeRange]);
+  }, [goals, timeRange, useMockData]);
+
+  // Get leaderboard data (mock or real)
+  const displayLeaderboard = useMockData ? generateMockData().leaderboard : leaderboard;
 
   if (loading) {
     return (
@@ -214,88 +331,53 @@ export const StatisticsView = () => {
         </div>
       </div>
 
-      {/* Progress Line Chart */}
-      <div className="card">
-        <div className={styles.chartHeader}>
-          <Typography.Title variant="small-strong">Прогресс по целям</Typography.Title>
-          <div className={styles.toggleButtons}>
-            <Button
-              mode={timeRange === 7 ? 'primary' : 'tertiary'}
-              appearance="neutral"
-              onClick={() => setTimeRange(7)}
-              className={styles.toggleButton}
-            >
-              7 дней
-            </Button>
-            <Button
-              mode={timeRange === 30 ? 'primary' : 'tertiary'}
-              appearance="neutral"
-              onClick={() => setTimeRange(30)}
-              className={styles.toggleButton}
-            >
-              30 дней
-            </Button>
-          </div>
-        </div>
-        <ResponsiveContainer width="100%" height={250}>
-          <LineChart data={statistics.progressTimeline}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-            <XAxis dataKey="date" stroke="var(--text-secondary)" fontSize={12} />
-            <YAxis stroke="var(--text-secondary)" fontSize={12} />
-            <Tooltip
-              contentStyle={{
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-soft)',
-                borderRadius: '8px'
-              }}
-            />
-            <Line
-              type="monotone"
-              dataKey="completed"
-              stroke="#6366f1"
-              strokeWidth={2}
-              dot={{ fill: '#6366f1', r: 4 }}
-              activeDot={{ r: 6 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Category Pie Chart and Weekday Bar Chart - Side by Side */}
+      {/* Progress Line Chart and Weekday Bar Chart - Side by Side */}
       <div className={styles.chartsRow}>
         <div className="card" style={{ flex: 1 }}>
-          <Typography.Title variant="small-strong" style={{ marginBottom: '16px' }}>
-            Распределение по категориям
-          </Typography.Title>
-          {statistics.categoryDistribution.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie
-                  data={statistics.categoryDistribution}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={(entry) => entry.name}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {statistics.categoryDistribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-soft)',
-                    borderRadius: '8px'
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className={styles.emptyChart}>Нет данных</div>
-          )}
+          <div className={styles.chartHeader}>
+            <Typography.Title variant="small-strong">Прогресс по целям</Typography.Title>
+            <div className={styles.toggleButtons}>
+              <Button
+                mode={timeRange === 7 ? 'primary' : 'tertiary'}
+                appearance="neutral"
+                onClick={() => setTimeRange(7)}
+                className={styles.toggleButton}
+              >
+                7 дней
+              </Button>
+              <Button
+                mode={timeRange === 30 ? 'primary' : 'tertiary'}
+                appearance="neutral"
+                onClick={() => setTimeRange(30)}
+                className={styles.toggleButton}
+              >
+                30 дней
+              </Button>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={statistics.progressTimeline}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+              <XAxis dataKey="date" stroke="var(--text-secondary)" fontSize={12} />
+              <YAxis stroke="var(--text-secondary)" fontSize={12} />
+              <Tooltip
+                contentStyle={{
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-soft)',
+                  borderRadius: '8px'
+                }}
+              />
+              <Line
+                type="monotone"
+                dataKey="completed"
+                stroke="#6366f1"
+                strokeWidth={3}
+                dot={false}
+                activeDot={{ r: 6 }}
+                strokeLinecap="round"
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
 
         <div className="card" style={{ flex: 1 }}>
@@ -365,7 +447,7 @@ export const StatisticsView = () => {
           Топ пользователей по количеству дней подряд с активностью
         </Typography.Body>
         <ul className={styles.leaderboardList}>
-          {leaderboard.map((entry) => (
+          {displayLeaderboard.map((entry) => (
             <li key={entry.userId} className={styles.leaderboardRow}>
               <div className={styles.leaderboardLeft}>
                 <span className={styles.rank}>{entry.rank}</span>
@@ -380,6 +462,18 @@ export const StatisticsView = () => {
             </li>
           ))}
         </ul>
+      </div>
+
+      {/* Mock Data Toggle Button */}
+      <div className={styles.mockDataToggle}>
+        <Button
+          mode={useMockData ? 'primary' : 'secondary'}
+          appearance="themed"
+          stretched
+          onClick={() => setUseMockData(!useMockData)}
+        >
+          {useMockData ? '✓ Моковые данные включены' : 'Показать моковые данные'}
+        </Button>
       </div>
     </div>
   );
