@@ -265,6 +265,7 @@ export const CalendarView = () => {
         status: stepStatus,
         focusArea: goalId ? 'Цели' : 'События',
         isEvent: true,
+        isDeadline: false,
         eventData: event,
         stepId: event.linked_step_id ? String(event.linked_step_id) : undefined
       };
@@ -274,8 +275,33 @@ export const CalendarView = () => {
   // Extract tasks from goals (steps with planned_date)
   const goalTasks = useMemo(() => extractTasksFromGoals(goals), [goals]);
 
-  // Combine events and goal tasks
-  const allTasks = useMemo(() => [...eventTasks, ...goalTasks], [eventTasks, goalTasks]);
+  // Create deadline tasks from active goals
+  const deadlineTasks = useMemo(() => {
+    return goals
+      .filter(goal => goal.status === 'active' && goal.targetDate)
+      .map(goal => ({
+        id: `deadline-${goal.id}`,
+        title: `Дедлайн: ${goal.title}`,
+        goalId: goal.id,
+        goalTitle: goal.title,
+        dueDate: dayjs(goal.targetDate).startOf('day').toISOString(),
+        status: 'scheduled' as const,
+        focusArea: goal.category,
+        isDeadline: true,
+        isEvent: false
+      }));
+  }, [goals]);
+
+  // Combine all tasks: deadlines first, then events and goal tasks
+  const allTasks = useMemo(() => {
+    const combined = [...deadlineTasks, ...eventTasks, ...goalTasks];
+    // Sort: deadlines first, then by date
+    return combined.sort((a, b) => {
+      if (a.isDeadline && !b.isDeadline) return -1;
+      if (!a.isDeadline && b.isDeadline) return 1;
+      return dayjs(a.dueDate).valueOf() - dayjs(b.dueDate).valueOf();
+    });
+  }, [deadlineTasks, eventTasks, goalTasks]);
 
   const tasksByDate = useMemo(() => groupTasksByDate(allTasks), [allTasks]);
 
@@ -557,7 +583,7 @@ export const CalendarView = () => {
                     return (
                       <div
                         key={task.id}
-                        className={styles.dayEventCard}
+                        className={`${styles.dayEventCard} ${task.isDeadline ? styles.deadlineDayCard : ''}`}
                         style={{
                           top: `${top}%`,
                           height: `${height}%`,
@@ -567,7 +593,7 @@ export const CalendarView = () => {
                         onClick={() => handleTaskAction(task, 'goal')}
                       >
                         <div className={styles.dayEventHeader}>
-                          <div className={styles.dayEventTime}>{taskTime}</div>
+                          <div className={styles.dayEventTime}>{task.isDeadline ? '🎯' : taskTime}</div>
                         </div>
                         <div className={styles.dayEventTitle}>{task.title}</div>
                       </div>
@@ -635,7 +661,7 @@ export const CalendarView = () => {
                       dayTasks.map((task) => (
                         <div
                           key={task.id}
-                          className={styles.weekEventCard}
+                          className={`${styles.weekEventCard} ${task.isDeadline ? styles.deadlineWeekCard : ''}`}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleTaskAction(task, 'goal');
@@ -643,7 +669,7 @@ export const CalendarView = () => {
                         >
                           <div className={styles.weekEventHeader}>
                             <div className={styles.weekEventTime}>
-                              {dayjs(task.dueDate).format('HH:mm')}
+                              {task.isDeadline ? '🎯' : dayjs(task.dueDate).format('HH:mm')}
                             </div>
                           </div>
                           <div className={styles.weekEventTitle}>
@@ -696,6 +722,7 @@ export const CalendarView = () => {
               const isSelected = key === selectedDate;
               const dayTasks = tasksByDate.get(key) || [];
               const hasAgenda = dayTasks.length > 0;
+              const hasDeadline = dayTasks.some(task => task.isDeadline);
               const isToday = day.isSame(dayjs(), 'day');
               return (
                 <button
@@ -717,7 +744,10 @@ export const CalendarView = () => {
                   {hasAgenda && (
                     <div className={styles.eventIndicators}>
                       {dayTasks.slice(0, 3).map((task, idx) => (
-                        <span key={task.id} className={styles.eventDot} />
+                        <span
+                          key={task.id}
+                          className={`${styles.eventDot} ${task.isDeadline ? styles.deadlineDot : ''}`}
+                        />
                       ))}
                       {dayTasks.length > 3 && (
                         <span className={styles.eventCount}>+{dayTasks.length - 3}</span>
@@ -746,18 +776,30 @@ export const CalendarView = () => {
           {agendaTasks.map((task) => {
             // Show checkbox only for tasks linked to goals (events with stepId or regular goal tasks)
             const hasCheckbox = task.stepId || !task.isEvent;
+            const isDeadline = task.isDeadline;
 
             return (
-              <div key={task.id} className={styles.agendaItem}>
-                {hasCheckbox && (
+              <div
+                key={task.id}
+                className={`${styles.agendaItem} ${isDeadline ? styles.deadlineAgendaItem : ''}`}
+              >
+                {!isDeadline && hasCheckbox && (
                   <div className={styles.agendaCheckboxContainer}>
                     <TaskCheckbox task={task} onToggle={handleToggleTask} />
                   </div>
                 )}
+                {isDeadline && (
+                  <div className={styles.deadlineIconAgenda}>🎯</div>
+                )}
                 <div className={styles.agendaContent}>
                   <Typography.Title variant="small-strong">{task.title}</Typography.Title>
                   <Typography.Body variant="small" className={styles.agendaMeta}>
-                    {task.goalTitle ? `Цель: ${task.goalTitle}` : 'Событие'}
+                    {isDeadline
+                      ? `Цель: ${task.goalTitle}`
+                      : task.goalTitle
+                      ? `Цель: ${task.goalTitle}`
+                      : 'Событие'
+                    }
                   </Typography.Body>
                 </div>
                 <div className={styles.agendaActions}>

@@ -1,7 +1,8 @@
 import { useMemo, useState, useEffect } from 'react';
 import dayjs from 'dayjs';
-import { Button, Input, Typography } from '@maxhub/max-ui';
+import { Button, Input, Typography, IconButton } from '@maxhub/max-ui';
 import { TaskCard } from '../../components/TaskCard';
+import { TaskCheckbox } from '../../components/TaskCheckbox';
 import { SectionHeading } from '../../components/SectionHeading';
 import { AddGoalModal } from '../../components/AddGoalModal';
 import { AddTaskModal } from '../../components/AddTaskModal';
@@ -32,9 +33,28 @@ export const TodayView = () => {
   const [loading, setLoading] = useState(false);
   const [showAddGoalModal, setShowAddGoalModal] = useState(false);
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+  const [showAllTasks, setShowAllTasks] = useState(false);
 
   // Load goals and events from API
   useEffect(() => {
+    // Check if userId is configured before loading
+    const userId = apiClient.getUserId();
+    console.log('[TodayView] useEffect - userId:', userId);
+
+    if (!userId) {
+      console.log('[TodayView] userId not yet configured, waiting...');
+      // Retry after a delay to allow apiClient to initialize
+      const timer = setTimeout(() => {
+        const retryUserId = apiClient.getUserId();
+        console.log('[TodayView] Retry - userId:', retryUserId);
+        if (retryUserId) {
+          loadGoals();
+          loadEvents();
+        }
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+
     loadGoals();
     loadEvents();
   }, []);
@@ -93,26 +113,76 @@ export const TodayView = () => {
 
   // Convert events to Task format
   const eventTasks = useMemo(() => {
-    return events.map((event) => ({
-      id: `event-${event.id}`,
-      title: event.title,
-      goalId: '', // Events don't belong to goals
-      goalTitle: 'Событие',
-      dueDate: event.time
-        ? dayjs(`${event.date}T${event.time}`).toISOString()
-        : dayjs(event.date).toISOString(),
-      status: 'scheduled' as const,
-      focusArea: 'События',
-      isEvent: true,
-      eventData: event
-    }));
-  }, [events]);
+    return events.map((event) => {
+      // Find the goal if this event is linked to one
+      let goalTitle = 'Событие';
+      let goalId = '';
+      let stepStatus: 'done' | 'scheduled' = 'scheduled';
+
+      if (event.event_type === 'goal_step' && event.linked_goal_id) {
+        const linkedGoal = goals.find(g => String(g.id) === String(event.linked_goal_id));
+        if (linkedGoal) {
+          goalTitle = linkedGoal.title;
+          goalId = String(linkedGoal.id);
+
+          // Find the step status
+          if (event.linked_step_id) {
+            const linkedStep = linkedGoal.steps?.find(s => String(s.id) === String(event.linked_step_id));
+            if (linkedStep) {
+              stepStatus = linkedStep.completed ? 'done' : 'scheduled';
+            }
+          }
+        }
+      }
+
+      return {
+        id: `event-${event.id}`,
+        title: event.title,
+        goalId,
+        goalTitle,
+        dueDate: event.time
+          ? dayjs(`${event.date}T${event.time}`).toISOString()
+          : dayjs(event.date).toISOString(),
+        status: stepStatus,
+        focusArea: goalId ? 'Цели' : 'События',
+        isEvent: true,
+        isDeadline: false,
+        eventData: event,
+        stepId: event.linked_step_id ? String(event.linked_step_id) : undefined
+      };
+    });
+  }, [events, goals]);
 
   // Extract tasks from goals (steps with planned_date)
   const goalTasks = useMemo(() => extractTasksFromGoals(goals), [goals]);
 
-  // Combine events and goal tasks
-  const allTasks = useMemo(() => [...eventTasks, ...goalTasks], [eventTasks, goalTasks]);
+  // Create deadline tasks from active goals
+  const deadlineTasks = useMemo(() => {
+    return goals
+      .filter(goal => goal.status === 'active' && goal.targetDate)
+      .map(goal => ({
+        id: `deadline-${goal.id}`,
+        title: `Дедлайн: ${goal.title}`,
+        goalId: goal.id,
+        goalTitle: goal.title,
+        dueDate: dayjs(goal.targetDate).startOf('day').toISOString(),
+        status: 'scheduled' as const,
+        focusArea: goal.category,
+        isDeadline: true,
+        isEvent: false
+      }));
+  }, [goals]);
+
+  // Combine all tasks: deadlines first, then events and goal tasks
+  const allTasks = useMemo(() => {
+    const combined = [...deadlineTasks, ...eventTasks, ...goalTasks];
+    // Sort: deadlines first, then by date
+    return combined.sort((a, b) => {
+      if (a.isDeadline && !b.isDeadline) return -1;
+      if (!a.isDeadline && b.isDeadline) return 1;
+      return dayjs(a.dueDate).valueOf() - dayjs(b.dueDate).valueOf();
+    });
+  }, [deadlineTasks, eventTasks, goalTasks]);
 
   const tasksToday = useMemo(() => getTodayTasks(allTasks), [allTasks]);
 
@@ -125,13 +195,19 @@ export const TodayView = () => {
   const stepsToday = tasksToday.length;
 
   const handleTaskClick = (task: Task) => {
+    // For deadlines and goal tasks, navigate to the goal
+    if (task.isDeadline || task.goalId) {
+      selectGoal(task.goalId);
+      setActiveTab('goals');
+      return;
+    }
+
+    // For standalone events
     const isEvent = (task as any).isEvent;
     if (isEvent) {
       alert('Это событие, оно не связано с целью. Откройте календарь для подробностей.');
       return;
     }
-    selectGoal(task.goalId);
-    setActiveTab('goals');
   };
 
   const handleDeleteTask = async (task: Task) => {
@@ -162,6 +238,47 @@ export const TodayView = () => {
       } else {
         alert('Не удалось удалить: ' + (err.message || 'Неизвестная ошибка'));
       }
+    }
+  };
+
+  const handleToggleTask = async (task: Task, newStatus: 'done' | 'scheduled') => {
+    const isLinkedToGoal = task.stepId && task.goalId;
+
+    try {
+      if (isLinkedToGoal) {
+        const backendStatus = newStatus === 'done' ? 'completed' : 'pending';
+
+        // Optimistically update UI
+        setGoals((prevGoals) =>
+          prevGoals.map(goal => {
+            if (goal.id !== task.goalId) return goal;
+
+            const updatedSteps = goal.steps?.map(step =>
+              step.id === task.stepId
+                ? { ...step, status: backendStatus, completed: backendStatus === 'completed' }
+                : step
+            ) || [];
+
+            const completedSteps = updatedSteps.filter(s => s.completed).length;
+            const totalSteps = updatedSteps.length;
+            const newProgress = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+
+            return {
+              ...goal,
+              steps: updatedSteps,
+              progress: newProgress
+            };
+          })
+        );
+
+        await apiClient.updateStep(task.stepId!, { status: backendStatus });
+      }
+    } catch (error) {
+      console.error('[TodayView] Failed to toggle task:', error);
+      alert('Не удалось обновить задачу');
+
+      // Revert on error
+      loadGoals();
     }
   };
 
@@ -231,17 +348,58 @@ export const TodayView = () => {
 
       <section>
         <SectionHeading title="Задачи на сегодня" subtitle={dayjs().format('dddd, DD MMMM')} />
-        <div className={styles.list}>
-          {tasksToday.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              onClick={() => handleTaskClick(task)}
-              onDelete={handleDeleteTask}
-            />
-          ))}
+        <div className={styles.taskList}>
           {tasksToday.length === 0 && (
             <div className={styles.placeholder}>Сегодня всё выполнено 👏</div>
+          )}
+          {(showAllTasks ? tasksToday : tasksToday.slice(0, 3)).map((task) => {
+            const hasCheckbox = task.stepId || !task.isEvent;
+            const isDeadline = task.isDeadline;
+
+            return (
+              <div
+                key={task.id}
+                className={`${styles.taskItem} ${isDeadline ? styles.deadlineItem : ''}`}
+              >
+                {!isDeadline && hasCheckbox && (
+                  <TaskCheckbox task={task} onToggle={handleToggleTask} />
+                )}
+                {isDeadline && (
+                  <div className={styles.deadlineIcon}>🎯</div>
+                )}
+                <div className={styles.taskContent} onClick={() => handleTaskClick(task)}>
+                  <Typography.Title variant="small-strong">{task.title}</Typography.Title>
+                  <Typography.Body variant="small" className={styles.taskMeta}>
+                    {isDeadline
+                      ? `Цель: ${task.goalTitle}`
+                      : `${task.goalTitle} • ${dayjs(task.dueDate).format('HH:mm')}`
+                    }
+                  </Typography.Body>
+                </div>
+                {!isDeadline && (
+                  <IconButton
+                    size="small"
+                    mode="tertiary"
+                    appearance="neutral"
+                    aria-label="Удалить"
+                    onClick={() => handleDeleteTask(task)}
+                  >
+                    🗑️
+                  </IconButton>
+                )}
+              </div>
+            );
+          })}
+          {tasksToday.length > 3 && (
+            <Button
+              mode="tertiary"
+              appearance="neutral"
+              stretched
+              onClick={() => setShowAllTasks(!showAllTasks)}
+              className={styles.showMoreButton}
+            >
+              {showAllTasks ? '↑ Скрыть' : `↓ Показать все (${tasksToday.length - 3})`}
+            </Button>
           )}
         </div>
       </section>

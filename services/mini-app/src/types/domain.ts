@@ -31,6 +31,7 @@ export interface Task {
   status: TaskStatus;
   focusArea: string;
   isEvent?: boolean; // True if this is a standalone event (not a goal step)
+  isDeadline?: boolean; // True if this is a goal deadline (target_date)
   eventData?: any; // Original event data if isEvent=true
   stepId?: string; // ID of the related goal step if this is a goal task
 }
