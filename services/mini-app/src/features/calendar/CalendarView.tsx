@@ -236,12 +236,21 @@ export const CalendarView = () => {
       // Find the goal if this event is linked to one
       let goalTitle = 'Событие';
       let goalId = '';
+      let stepStatus: 'done' | 'scheduled' = 'scheduled';
 
       if (event.event_type === 'goal_step' && event.linked_goal_id) {
         const linkedGoal = goals.find(g => String(g.id) === String(event.linked_goal_id));
         if (linkedGoal) {
           goalTitle = linkedGoal.title;
           goalId = String(linkedGoal.id);
+
+          // Find the step status
+          if (event.linked_step_id) {
+            const linkedStep = linkedGoal.steps?.find(s => String(s.id) === String(event.linked_step_id));
+            if (linkedStep) {
+              stepStatus = linkedStep.completed ? 'done' : 'scheduled';
+            }
+          }
         }
       }
 
@@ -253,7 +262,7 @@ export const CalendarView = () => {
         dueDate: event.time
           ? dayjs(`${event.date}T${event.time}`).toISOString()
           : dayjs(event.date).toISOString(),
-        status: 'scheduled' as const,
+        status: stepStatus,
         focusArea: goalId ? 'Цели' : 'События',
         isEvent: true,
         eventData: event,
@@ -375,10 +384,7 @@ export const CalendarView = () => {
         const backendStatus = newStatus === 'done' ? 'completed' : 'pending';
         console.log('[CalendarView] Updating step status:', task.stepId, backendStatus);
 
-        await apiClient.updateStep(task.stepId!, { status: backendStatus });
-        console.log('[CalendarView] Step status updated successfully');
-
-        // Update local goals state to reflect the change immediately
+        // Optimistically update UI FIRST
         setGoals((prevGoals) =>
           prevGoals.map(goal => {
             if (goal.id !== task.goalId) return goal;
@@ -409,6 +415,10 @@ export const CalendarView = () => {
           })
         );
 
+        // Then update API
+        await apiClient.updateStep(task.stepId!, { status: backendStatus });
+        console.log('[CalendarView] Step status updated successfully in API');
+
         // No need to reload - UI updates via state
       } else if (isEvent) {
         // Standalone event (not linked to a goal) - no completion tracking yet
@@ -418,6 +428,32 @@ export const CalendarView = () => {
     } catch (error) {
       console.error('[CalendarView] Failed to toggle task:', error);
       alert('Не удалось обновить задачу');
+
+      // Revert optimistic update on error
+      if (isLinkedToGoal) {
+        const revertStatus = newStatus === 'done' ? 'pending' : 'completed';
+        setGoals((prevGoals) =>
+          prevGoals.map(goal => {
+            if (goal.id !== task.goalId) return goal;
+
+            const revertedSteps = goal.steps?.map(step =>
+              step.id === task.stepId
+                ? { ...step, status: revertStatus, completed: revertStatus === 'completed' }
+                : step
+            ) || [];
+
+            const completedSteps = revertedSteps.filter(s => s.completed).length;
+            const totalSteps = revertedSteps.length;
+            const newProgress = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+
+            return {
+              ...goal,
+              steps: revertedSteps,
+              progress: newProgress
+            };
+          })
+        );
+      }
     }
   };
 
@@ -707,48 +743,55 @@ export const CalendarView = () => {
           {agendaTasks.length === 0 && (
             <div className={styles.emptyState}>На этот день задач нет — можно сфокусироваться.</div>
           )}
-          {agendaTasks.map((task) => (
-            <div key={task.id} className={styles.agendaItem}>
-              <div className={styles.agendaCheckboxContainer}>
-                <TaskCheckbox task={task} onToggle={handleToggleTask} />
+          {agendaTasks.map((task) => {
+            // Show checkbox only for tasks linked to goals (events with stepId or regular goal tasks)
+            const hasCheckbox = task.stepId || !task.isEvent;
+
+            return (
+              <div key={task.id} className={styles.agendaItem}>
+                {hasCheckbox && (
+                  <div className={styles.agendaCheckboxContainer}>
+                    <TaskCheckbox task={task} onToggle={handleToggleTask} />
+                  </div>
+                )}
+                <div className={styles.agendaContent}>
+                  <Typography.Title variant="small-strong">{task.title}</Typography.Title>
+                  <Typography.Body variant="small" className={styles.agendaMeta}>
+                    {task.goalTitle ? `Цель: ${task.goalTitle}` : 'Событие'}
+                  </Typography.Body>
+                </div>
+                <div className={styles.agendaActions}>
+                  <IconButton
+                    size="small"
+                    mode="tertiary"
+                    appearance="neutral"
+                    aria-label="Перейти к цели"
+                    onClick={() => handleTaskAction(task, 'goal')}
+                  >
+                    🎯
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    mode="tertiary"
+                    appearance="neutral"
+                    aria-label="Открыть чат"
+                    onClick={() => handleTaskAction(task, 'chat')}
+                  >
+                    💬
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    mode="tertiary"
+                    appearance="neutral"
+                    aria-label="Удалить задачу"
+                    onClick={() => handleTaskAction(task, 'delete')}
+                  >
+                    🗑️
+                  </IconButton>
+                </div>
               </div>
-              <div className={styles.agendaContent}>
-                <Typography.Title variant="small-strong">{task.title}</Typography.Title>
-                <Typography.Body variant="small" className={styles.agendaMeta}>
-                  Цель: {task.goalTitle}
-                </Typography.Body>
-              </div>
-              <div className={styles.agendaActions}>
-                <IconButton
-                  size="small"
-                  mode="tertiary"
-                  appearance="neutral"
-                  aria-label="Перейти к цели"
-                  onClick={() => handleTaskAction(task, 'goal')}
-                >
-                  🎯
-                </IconButton>
-                <IconButton
-                  size="small"
-                  mode="tertiary"
-                  appearance="neutral"
-                  aria-label="Открыть чат"
-                  onClick={() => handleTaskAction(task, 'chat')}
-                >
-                  💬
-                </IconButton>
-                <IconButton
-                  size="small"
-                  mode="tertiary"
-                  appearance="neutral"
-                  aria-label="Удалить задачу"
-                  onClick={() => handleTaskAction(task, 'delete')}
-                >
-                  🗑️
-                </IconButton>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className={styles.actionsRow}>
