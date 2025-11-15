@@ -367,7 +367,14 @@ export const TodayView = () => {
                 {isDeadline && (
                   <div className={styles.deadlineIcon}>🎯</div>
                 )}
-                <div className={styles.taskContent} onClick={() => handleTaskClick(task)}>
+                <div
+                  className={styles.taskContent}
+                  onClick={(e) => {
+                    // Only handle click if it's not from a button or checkbox
+                    if ((e.target as HTMLElement).closest('button')) return;
+                    handleTaskClick(task);
+                  }}
+                >
                   <Typography.Title variant="small-strong">{task.title}</Typography.Title>
                   <Typography.Body variant="small" className={styles.taskMeta}>
                     {isDeadline
@@ -382,7 +389,10 @@ export const TodayView = () => {
                     mode="tertiary"
                     appearance="neutral"
                     aria-label="Удалить"
-                    onClick={() => handleDeleteTask(task)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteTask(task);
+                    }}
                   >
                     🗑️
                   </IconButton>
